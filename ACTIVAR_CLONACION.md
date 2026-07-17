@@ -1,3 +1,3 @@
 Esta rama temporal activa la copia independiente del proyecto Claro.
 
-GitHub Actions habilitado. Ejecutar clonación definitiva.
+Prueba final del runner de GitHub Actions.
