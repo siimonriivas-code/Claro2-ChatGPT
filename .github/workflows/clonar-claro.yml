@@ -1,8 +1,9 @@
 name: Clonar Claro
 
 on:
-  push:
+  pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,6 +16,7 @@ jobs:
       - name: Preparar repositorio destino
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Descargar repositorio original
