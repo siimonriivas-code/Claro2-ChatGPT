@@ -1,0 +1,33 @@
+name: Clonar Claro
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  clonar:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preparar repositorio destino
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Descargar repositorio original
+        run: git clone --depth 1 https://github.com/siimonriivas-code/Claro.git /tmp/claro-original
+
+      - name: Copiar proyecto sin tocar el original
+        run: |
+          rsync -a --delete --exclude='.git/' /tmp/claro-original/ ./
+
+      - name: Guardar copia independiente
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Clonar Claro como base independiente" || exit 0
+          git push origin main
