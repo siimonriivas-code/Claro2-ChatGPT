@@ -1,0 +1,171 @@
+//
+//  DashboardView.swift
+//  Claro — Carpeta: Vistas/Dashboard
+//  ⚠️ REEMPLAZA al existente.
+//
+//  🎉 SE ACABARON LOS NÚMEROS FICTICIOS.
+//  Todo lo que ves aquí ahora viene del Motor financiero (Ley 1):
+//  disponible real, comprometido, pagos próximos, te deben e insights.
+//
+
+import SwiftUI
+import SwiftData
+
+struct DashboardView: View {
+    @Query private var cuentas: [CuentaBancaria]
+    @Query private var tarjetas: [TarjetaCredito]
+    @Query private var personas: [Persona]
+    @Query private var planes: [PlanMSI]
+    @Query private var deudas: [Deuda]
+
+    @AppStorage("montosOcultos") private var montosOcultos = false
+
+    private var disponible: Double {
+        MotorDashboard.disponibleReal(cuentas: cuentas, tarjetas: tarjetas)
+    }
+    private var comprometido: Double {
+        MotorDashboard.comprometido(tarjetas: tarjetas)
+    }
+    private var teDeben: Double {
+        MotorDashboard.totalTeDeben(personas: personas)
+    }
+    private var pagosProximos: [EstadoDeCuenta] {
+        MotorDashboard.pagosProximos(tarjetas: tarjetas)
+    }
+    private var insights: [Insight] {
+        MotorDashboard.insights(cuentas: cuentas, tarjetas: tarjetas,
+                                personas: personas, planes: planes,
+                                deudas: deudas)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Fecha del día (diseño Claro Premium)
+                    Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                        .tracking(1.1)
+                        .foregroundStyle(Tema.textoSecundario)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    panelDisponible
+
+                    HStack(spacing: 16) {
+                        panelMini(titulo: "Comprometido",
+                                  monto: comprometido,
+                                  color: Tema.advertencia)
+                        panelMini(titulo: "Te deben",
+                                  monto: teDeben,
+                                  color: Tema.acento)
+                    }
+
+                    if !pagosProximos.isEmpty {
+                        TituloSeccion(texto: "Pagos próximos")
+                        ForEach(pagosProximos, id: \.persistentModelID) { estado in
+                            panelPagoProximo(estado)
+                        }
+                    }
+
+                    if !insights.isEmpty {
+                        TituloSeccion(texto: "Insights")
+                        ForEach(insights) { insight in
+                            panelInsight(insight)
+                        }
+                    }
+
+                    if cuentas.isEmpty && tarjetas.isEmpty {
+                        Panel {
+                            Text("Da de alta tus bancos, cuentas y tarjetas en la pestaña Cuentas para que este tablero cobre vida.")
+                                .font(.footnote)
+                                .foregroundStyle(Tema.textoSecundario)
+                                .frame(maxWidth: .infinity)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(Tema.fondo.ignoresSafeArea())
+            .navigationTitle("Inicio")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        montosOcultos.toggle()
+                    } label: {
+                        Image(systemName: montosOcultos ? "eye.slash.fill" : "eye.fill")
+                            .foregroundStyle(Tema.textoSecundario)
+                    }
+                }
+            }
+        }
+    }
+
+    private var panelDisponible: some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("DISPONIBLE REAL")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Tema.textoSecundario)
+                Text(disponible.comoDinero)
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .foregroundStyle(disponible >= 0 ? Tema.positivo : Tema.urgente)
+                Text("Dinero en cuentas menos lo comprometido en pagos de tarjetas")
+                    .font(.footnote)
+                    .foregroundStyle(Tema.textoSecundario)
+            }
+        }
+    }
+
+    private func panelMini(titulo: String, monto: Double, color: Color) -> some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(titulo.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Tema.textoSecundario)
+                Text(monto.comoDinero)
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(color)
+            }
+        }
+    }
+
+    private func panelPagoProximo(_ estado: EstadoDeCuenta) -> some View {
+        let dias = estado.diasParaVencer
+        let color: Color = estado.situacion == .vencidoSinCubrir ? Tema.urgente
+                         : dias <= 3 ? Tema.urgente
+                         : dias <= 7 ? Tema.advertencia
+                         : Tema.positivo
+
+        return Panel {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(estado.tarjeta?.nombre ?? "Tarjeta")
+                        .font(.headline)
+                        .foregroundStyle(Tema.textoPrincipal)
+                    Text("Falta cubrir: \(estado.faltaPorCubrir.comoDinero) · vence \(estado.fechaLimitePago.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.textoSecundario)
+                }
+                Spacer()
+                Pildora(texto: dias >= 0 ? "\(dias) días" : "Vencido",
+                        color: color)
+            }
+        }
+    }
+
+    private func panelInsight(_ insight: Insight) -> some View {
+        Panel {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: insight.icono)
+                    .font(.title3)
+                    .foregroundStyle(insight.esUrgente ? Tema.urgente : Tema.acento)
+                Text(insight.texto)
+                    .font(.footnote)
+                    .foregroundStyle(Tema.textoPrincipal)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}

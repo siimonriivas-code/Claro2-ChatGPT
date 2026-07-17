@@ -1,0 +1,141 @@
+//
+//  PagoTarjetaView.swift
+//  Claro — Carpeta: Vistas/Registrar
+//  ⚠️ REEMPLAZA al existente.
+//
+//  Novedad (espejo estricto): si eliges una cuenta de origen, NO puedes
+//  pagar más de lo que esa cuenta tiene, igual que en la vida real.
+//
+
+import SwiftUI
+import SwiftData
+
+struct PagoTarjetaView: View {
+    var tarjetaInicial: TarjetaCredito? = nil
+
+    @Environment(\.modelContext) private var contexto
+    @Environment(\.dismiss) private var cerrar
+
+    @Query(sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
+    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+
+    @State private var monto: Double?
+    @State private var tarjetaSeleccionada: TarjetaCredito?
+    @State private var cuentaOrigen: CuentaBancaria?
+    @State private var fecha: Date = .now
+    @State private var detalle = ""
+
+    init(tarjetaInicial: TarjetaCredito? = nil) {
+        self.tarjetaInicial = tarjetaInicial
+        _tarjetaSeleccionada = State(initialValue: tarjetaInicial)
+    }
+
+    /// Espejo estricto: si eliges una cuenta, no puedes pagar más
+    /// de lo que esa cuenta tiene (igual que en la vida real).
+    private var fondosInsuficientes: Bool {
+        guard let cuenta = cuentaOrigen, let m = monto else { return false }
+        return m > cuenta.saldoCalculado
+    }
+
+    private var puedeGuardar: Bool {
+        (monto ?? 0) > 0
+        && tarjetaSeleccionada != nil
+        && cuentaOrigen != nil          // el pago DEBE salir de una cuenta
+        && !fondosInsuficientes
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Monto del pago") {
+                    TextField("0.00", value: $monto, format: .number)
+                        .keyboardType(.decimalPad)
+                        .font(.title2.weight(.bold))
+
+                    // Atajos inteligentes según el corte vigente
+                    if let t = tarjetaSeleccionada {
+                        if let vigente = t.estadoDeCuentaVigente,
+                           vigente.faltaPorCubrir > 0 {
+                            Button {
+                                monto = vigente.faltaPorCubrir
+                            } label: {
+                                Label("Usar falta por cubrir: \(vigente.faltaPorCubrir.comoDinero)",
+                                      systemImage: "wand.and.stars")
+                                    .font(.footnote)
+                            }
+                        }
+                        if t.deudaCalculada > 0 {
+                            Button {
+                                monto = t.deudaCalculada
+                            } label: {
+                                Label("Usar deuda total: \(t.deudaCalculada.comoDinero)",
+                                      systemImage: "creditcard.fill")
+                                    .font(.footnote)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Picker("Tarjeta que pagas", selection: $tarjetaSeleccionada) {
+                        Text("Selecciona…").tag(nil as TarjetaCredito?)
+                        ForEach(tarjetas) { t in
+                            Text(t.nombre).tag(t as TarjetaCredito?)
+                        }
+                    }
+
+                    Picker("Cuenta de donde sale", selection: $cuentaOrigen) {
+                        Text("Selecciona…").tag(nil as CuentaBancaria?)
+                        ForEach(cuentas) { c in
+                            Text("\(c.banco?.nombre ?? "") · \(c.nombre)")
+                                .tag(c as CuentaBancaria?)
+                        }
+                    }
+
+                    DatePicker("Fecha del pago", selection: $fecha,
+                               displayedComponents: .date)
+
+                    TextField("Descripción (opcional)", text: $detalle)
+                } header: {
+                    Text("Detalles")
+                } footer: {
+                    Text("🪞 Espejo estricto: todo pago sale de una de tus cuentas y solo si tiene fondos. Si pagaste con dinero que no está en la app, registra primero ese ingreso y después el pago.")
+                }
+
+                // Espejo estricto: sin fondos no hay pago
+                if fondosInsuficientes, let c = cuentaOrigen, let m = monto {
+                    Section {
+                        Label("Fondos insuficientes: quieres pagar \(m.comoDinero) pero \(c.nombre) solo tiene \(c.saldoCalculado.comoDinero). Claro es un espejo de tu dinero real: registra primero el ingreso, o paga menos.",
+                              systemImage: "nosign")
+                            .font(.footnote)
+                            .foregroundStyle(Tema.urgente)
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Tema.fondo.ignoresSafeArea())
+            .navigationTitle("Pago de tarjeta")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { cerrar() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") {
+                        let movimiento = Movimiento(
+                            tipo: .pagoTarjeta,
+                            monto: monto ?? 0,
+                            fecha: fecha,
+                            detalle: detalle.trimmingCharacters(in: .whitespaces),
+                            cuenta: cuentaOrigen,
+                            tarjeta: tarjetaSeleccionada)
+                        contexto.insert(movimiento)
+                        cerrar()
+                    }
+                    .disabled(!puedeGuardar)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
