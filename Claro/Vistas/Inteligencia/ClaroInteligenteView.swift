@@ -81,7 +81,7 @@ struct ClaroInteligenteView: View {
                 Text(voz.aviso ?? "")
             }
         .confirmationDialog(
-            "¿Eliminar Qwen del iPhone?",
+            "¿Eliminar \(qwen.nombreVisible) del iPhone?",
             isPresented: $confirmarEliminacionQwen,
             titleVisibility: .visible) {
                 Button("Eliminar modelo", role: .destructive) {
@@ -89,7 +89,7 @@ struct ClaroInteligenteView: View {
                 }
                 Button("Cancelar", role: .cancel) {}
             } message: {
-                Text("Se liberarán aproximadamente 2.14 GB. Tus datos financieros y estados de cuenta no se tocarán.")
+                Text("Se liberarán aproximadamente \(qwen.tamanoAproximado). Tus datos financieros y estados de cuenta no se tocarán.")
             }
     }
 
@@ -129,6 +129,18 @@ struct ClaroInteligenteView: View {
 
     private var panelQwen: some View {
         VStack(spacing: 8) {
+            Picker("Modelo local", selection: Binding(
+                get: { qwen.modeloSeleccionado },
+                set: { modelo in
+                    Task { await qwen.seleccionar(modelo) }
+                })) {
+                    ForEach(ModeloQwen.allCases) { modelo in
+                        Text(modelo.nombreSelector).tag(modelo)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!qwen.puedeCambiarModelo)
+
             HStack(spacing: 10) {
                 Image(systemName: "brain.head.profile")
                     .font(.headline)
@@ -138,7 +150,7 @@ struct ClaroInteligenteView: View {
                                 in: Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Qwen3 4B · chat avanzado")
+                    Text("\(qwen.nombreVisible) · chat avanzado")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Tema.textoPrincipal)
                     Text(qwen.descripcionEstado)
@@ -176,7 +188,7 @@ struct ClaroInteligenteView: View {
             .font(.caption.weight(.bold))
             .buttonStyle(.borderedProminent)
             .tint(Tema.acento)
-            .accessibilityHint("Descarga opcional de aproximadamente 2.14 GB")
+            .accessibilityHint("Descarga opcional de aproximadamente \(qwen.tamanoAproximado)")
 
         case .descargando:
             ProgressView()
@@ -249,7 +261,7 @@ struct ClaroInteligenteView: View {
                         HStack(spacing: 8) {
                             ProgressView().tint(Tema.acento)
                             Text(qwen.estaListo
-                                 ? "Qwen está razonando con el resumen financiero…"
+                                 ? "\(qwen.nombreVisible) está razonando con el resumen financiero…"
                                  : "Analizando todos tus datos…")
                                 .font(.footnote)
                                 .foregroundStyle(Tema.textoSecundario)
@@ -430,7 +442,7 @@ struct ClaroInteligenteView: View {
 
     private func iconoFuente(_ fuente: FuenteRespuestaClaro) -> String {
         switch fuente {
-        case .qwen: return "brain.head.profile"
+        case .qwen4B, .qwen8B: return "brain.head.profile"
         case .appleIntelligence: return "apple.intelligence"
         case .motorLocal: return "function"
         }

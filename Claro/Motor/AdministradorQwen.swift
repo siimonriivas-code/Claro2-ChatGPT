@@ -22,40 +22,92 @@ enum EstadoModeloQwen: Equatable {
     case error(String)
 }
 
+enum ModeloQwen: String, CaseIterable, Identifiable {
+    case estable4B
+    case potente8B
+
+    var id: String { rawValue }
+
+    var modeloID: String {
+        switch self {
+        case .estable4B: return "Qwen/Qwen3-4B-MLX-4bit"
+        case .potente8B: return "mlx-community/Qwen3-8B-4bit"
+        }
+    }
+
+    var nombreVisible: String {
+        switch self {
+        case .estable4B: return "Qwen3 4B"
+        case .potente8B: return "Qwen3 8B"
+        }
+    }
+
+    var nombreSelector: String {
+        switch self {
+        case .estable4B: return "4B · Estable"
+        case .potente8B: return "8B · Potente"
+        }
+    }
+
+    var tamanoAproximado: String {
+        switch self {
+        case .estable4B: return "2.14 GB"
+        case .potente8B: return "4.62 GB"
+        }
+    }
+
+    var nombreDirectorio: String {
+        switch self {
+        case .estable4B: return "Qwen3-4B-MLX-4bit"
+        case .potente8B: return "Qwen3-8B-4bit"
+        }
+    }
+
+    /// El 8B reserva menos conversación simultánea para cuidar la memoria
+    /// del iPhone sin reducir la calidad de razonamiento del modelo.
+    var maximoKV: Int {
+        switch self {
+        case .estable4B: return 8_192
+        case .potente8B: return 4_096
+        }
+    }
+}
+
 @MainActor
 final class AdministradorQwen: ObservableObject {
     static let shared = AdministradorQwen()
 
-    static let modeloID = "Qwen/Qwen3-4B-MLX-4bit"
-    static let nombreVisible = "Qwen3 4B"
-    static let tamanoAproximado = "2.14 GB"
-
     @Published private(set) var estado: EstadoModeloQwen = .noDescargado
+    @Published private(set) var modeloSeleccionado: ModeloQwen
 
     private var contenedor: ModelContainer?
     private var operacionEnCurso = false
 
-    private let cache: HubCache
-    private let cliente: HubClient
-    private let repo: Repo.ID
+    private static let claveModeloSeleccionado = "modeloQwenSeleccionado"
 
     private init() {
-        let raiz = Self.directorioDelModelo
-        let cache = HubCache(cacheDirectory: raiz)
-        self.cache = cache
-        self.cliente = HubClient(cache: cache)
-        self.repo = Repo.ID(rawValue: Self.modeloID)!
+        let valorGuardado = UserDefaults.standard.string(
+            forKey: Self.claveModeloSeleccionado)
+        let modelo = valorGuardado.flatMap(ModeloQwen.init(rawValue:)) ?? .estable4B
+        self.modeloSeleccionado = modelo
+        let raiz = Self.directorioDelModelo(modelo)
         self.estado = Self.contienePesos(en: raiz) ? .cargando : .noDescargado
     }
 
     var estaDescargado: Bool {
-        Self.contienePesos(en: Self.directorioDelModelo)
+        Self.contienePesos(en: Self.directorioDelModelo(modeloSeleccionado))
     }
 
     var estaListo: Bool {
         if case .listo = estado { return true }
         return false
     }
+
+    var puedeCambiarModelo: Bool { !operacionEnCurso }
+
+    var nombreVisible: String { modeloSeleccionado.nombreVisible }
+
+    var tamanoAproximado: String { modeloSeleccionado.tamanoAproximado }
 
     var descripcionEstado: String {
         switch estado {
@@ -67,6 +119,23 @@ final class AdministradorQwen: ObservableObject {
         }
     }
 
+    /// Cambia de modelo sin descargar nada automáticamente. Si la opción ya
+    /// existe en el iPhone, la prepara; de lo contrario muestra Descargar.
+    func seleccionar(_ modelo: ModeloQwen) async {
+        guard !operacionEnCurso else { return }
+        guard modelo != modeloSeleccionado else {
+            await prepararSiEstaDescargado()
+            return
+        }
+
+        contenedor = nil
+        modeloSeleccionado = modelo
+        UserDefaults.standard.set(modelo.rawValue,
+                                  forKey: Self.claveModeloSeleccionado)
+        estado = estaDescargado ? .cargando : .noDescargado
+        if estaDescargado { await prepararSiEstaDescargado() }
+    }
+
     /// Descarga desde Hugging Face exclusivamente los archivos públicos del
     /// modelo. Ningún dato de la app forma parte de esta solicitud.
     func descargarYCargar() async {
@@ -75,9 +144,13 @@ final class AdministradorQwen: ObservableObject {
         estado = .descargando(0)
 
         do {
+            let cache = HubCache(cacheDirectory:
+                Self.directorioDelModelo(modeloSeleccionado))
+            let cliente = HubClient(cache: cache)
+            let repo = Repo.ID(rawValue: modeloSeleccionado.modeloID)!
             let snapshot = try await cliente.downloadSnapshot(
                 of: repo,
-                matching: ["*.json", "*.safetensors", "*.txt", "*.model"],
+                matching: ["*.json", "*.safetensors", "*.txt", "*.model", "*.jinja"],
                 maxConcurrentDownloads: 4) { [weak self] progreso in
                     guard let self else { return }
                     let fraccion = progreso.totalUnitCount > 0
@@ -124,7 +197,7 @@ final class AdministradorQwen: ObservableObject {
 
         let parametros = GenerateParameters(
             maxTokens: requiereRazonamiento ? 1_200 : 750,
-            maxKVSize: 8_192,
+            maxKVSize: modeloSeleccionado.maximoKV,
             kvBits: 8,
             temperature: requiereRazonamiento ? 0.45 : 0.30,
             topP: 0.88,
@@ -148,11 +221,14 @@ final class AdministradorQwen: ObservableObject {
     func eliminarModelo() throws {
         guard !operacionEnCurso else { return }
         contenedor = nil
-        let objetivo = Self.directorioDelModelo.standardizedFileURL
+        let objetivo = Self.directorioDelModelo(modeloSeleccionado).standardizedFileURL
         let caches = FileManager.default.urls(for: .cachesDirectory,
                                               in: .userDomainMask)[0].standardizedFileURL
-        guard objetivo.path.hasPrefix(caches.path + "/"),
-              objetivo.lastPathComponent == "Qwen3-4B-MLX-4bit" else {
+        let raizModelos = caches.appendingPathComponent(
+            "ClaroModelos", isDirectory: true).standardizedFileURL
+        let nombresPermitidos = Set(ModeloQwen.allCases.map(\.nombreDirectorio))
+        guard objetivo.deletingLastPathComponent() == raizModelos,
+              nombresPermitidos.contains(objetivo.lastPathComponent) else {
             throw ErrorQwen.rutaNoSegura
         }
         if FileManager.default.fileExists(atPath: objetivo.path) {
@@ -168,6 +244,9 @@ final class AdministradorQwen: ObservableObject {
     }
 
     private var directorioSnapshotActual: URL? {
+        let cache = HubCache(cacheDirectory:
+            Self.directorioDelModelo(modeloSeleccionado))
+        let repo = Repo.ID(rawValue: modeloSeleccionado.modeloID)!
         guard let revision = cache.resolveRevision(repo: repo, kind: .model,
                                                    ref: "main") else { return nil }
         let candidato = cache.snapshotsDirectory(repo: repo, kind: .model)
@@ -175,10 +254,10 @@ final class AdministradorQwen: ObservableObject {
         return FileManager.default.fileExists(atPath: candidato.path) ? candidato : nil
     }
 
-    private static var directorioDelModelo: URL {
+    private static func directorioDelModelo(_ modelo: ModeloQwen) -> URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ClaroModelos", isDirectory: true)
-            .appendingPathComponent("Qwen3-4B-MLX-4bit", isDirectory: true)
+            .appendingPathComponent(modelo.nombreDirectorio, isDirectory: true)
     }
 
     private static func contienePesos(en directorio: URL) -> Bool {
