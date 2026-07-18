@@ -22,6 +22,7 @@ struct DashboardView: View {
 
     @AppStorage("montosOcultos") private var montosOcultos = false
     @AppStorage("apariencia") private var apariencia = Apariencia.oscuro.rawValue
+    @State private var mostrandoClaroInteligente = false
 
     private var disponible: Double {
         MotorDashboard.disponibleReal(cuentas: cuentas, tarjetas: tarjetas)
@@ -52,6 +53,8 @@ struct DashboardView: View {
                         .tracking(1.1)
                         .foregroundStyle(Tema.textoSecundario)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    accesoClaroInteligente
 
                     panelDisponible
 
@@ -95,6 +98,14 @@ struct DashboardView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
+                        mostrandoClaroInteligente = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Tema.acento)
+                    }
+                    .accessibilityLabel("Abrir Claro Inteligente")
+
+                    Button {
                         alternarApariencia()
                     } label: {
                         Image(systemName: esquemaActual == .dark
@@ -113,6 +124,9 @@ struct DashboardView: View {
                     }
                 }
             }
+            .sheet(isPresented: $mostrandoClaroInteligente) {
+                ClaroInteligenteView()
+            }
         }
     }
 
@@ -122,6 +136,41 @@ struct DashboardView: View {
         apariencia = esquemaActual == .dark
             ? Apariencia.claro.rawValue
             : Apariencia.oscuro.rawValue
+    }
+
+    private var accesoClaroInteligente: some View {
+        Button {
+            mostrandoClaroInteligente = true
+        } label: {
+            HStack(spacing: 13) {
+                Image(systemName: "sparkles")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Tema.acento)
+                    .frame(width: 44, height: 44)
+                    .background(Tema.acento.opacity(0.15), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Pregúntale a Claro")
+                        .font(.headline)
+                        .foregroundStyle(Tema.textoPrincipal)
+                    Text("Analiza, proyecta y evalúa decisiones con tus datos")
+                        .font(.caption)
+                        .foregroundStyle(Tema.textoSecundario)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(Tema.textoSecundario)
+            }
+            .padding(16)
+            .background(
+                LinearGradient(colors: [Tema.acento.opacity(0.15), Tema.panel],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Tema.acento.opacity(0.25), lineWidth: 1))
+        }
+        .buttonStyle(Presionable())
     }
 
     private var panelDisponible: some View {

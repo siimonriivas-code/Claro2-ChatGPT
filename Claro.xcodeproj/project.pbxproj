@@ -260,6 +260,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Claro 2 ChatGPT";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Claro usa Face ID para proteger tus finanzas";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claro usa el micrófono para recibir tus preguntas financieras por voz";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claro convierte tu voz en texto de forma local para responder tus preguntas financieras";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -296,6 +298,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Claro 2 ChatGPT";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Claro usa Face ID para proteger tus finanzas";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claro usa el micrófono para recibir tus preguntas financieras por voz";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claro convierte tu voz en texto de forma local para responder tus preguntas financieras";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
