@@ -287,9 +287,17 @@ enum AnalizadorEstadoDeCuenta {
 
             // 1) Toda fila de movimiento empieza con una fecha (en cualquiera
             //    de los formatos de los bancos mexicanos)
-            guard let (fecha, restoTrasFecha) = fechaInicial(de: linea,
-                                                             anioPorDefecto: anioCorte)
+            guard let (fechaDetectada, restoTrasFecha) = fechaInicial(
+                de: linea, anioPorDefecto: anioCorte)
             else { continue }
+
+            var fecha = fechaDetectada
+            if let corte = resultado.fechaCorte {
+                guard let fechaValidada = fechaDeMovimiento(fecha,
+                                                             dentroDelCorte: corte)
+                else { continue }
+                fecha = fechaValidada
+            }
 
             // Segunda fecha opcional (BBVA y Banorte traen operación + cargo)
             var cuerpo = restoTrasFecha
@@ -314,7 +322,8 @@ enum AnalizadorEstadoDeCuenta {
             guard let reg = analizarFilaRegular(cuerpo) else { continue }
             guard !reg.esNegativo else { continue }   // pagos/abonos del cliente
 
-            var descripcion = reg.descripcion
+            var descripcion = quitarSegmentoDePresupuesto(reg.descripcion)
+            guard !descripcion.isEmpty else { continue }
             let mayus = descripcion.uppercased()
             let esPago = ["PAGO TDC", "SU PAGO", "BMOVIL.PAGO",
                           "PAGO POR SPEI", "PAGO RECIBIDO", "GRACIAS POR SU PAGO",
@@ -492,7 +501,45 @@ enum AnalizadorEstadoDeCuenta {
            let r = Range(m.range, in: limpio) {
             limpio.removeSubrange(r)
         }
+        // Liverpool añade a veces una referencia numérica larga al final
+        // del nombre del comercio; sirve al banco, no al usuario.
+        if let regex = try? NSRegularExpression(pattern: "\\s+\\d{6,}\\s*$"),
+           let m = regex.firstMatch(in: limpio,
+                                    range: NSRange(limpio.startIndex..., in: limpio)),
+           let r = Range(m.range, in: limpio) {
+            limpio.removeSubrange(r)
+        }
         return limpio.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// En Liverpool la tabla informativa de proyección puede quedar pegada
+    /// al movimiento anterior durante el OCR. Se conserva el comercio que
+    /// está antes de "PRESUPUESTO"; si la fila empieza ahí, queda vacía y se
+    /// descarta porque no es una compra.
+    private static func quitarSegmentoDePresupuesto(_ texto: String) -> String {
+        guard let rango = texto.range(of: "PRESUP",
+                                      options: [.caseInsensitive, .diacriticInsensitive])
+        else { return texto.trimmingCharacters(in: .whitespaces) }
+        return String(texto[..<rango.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Ningún movimiento real del estado puede ocurrir después del corte.
+    /// En cortes de enero, una fecha "DIC" sin año pertenece al año anterior.
+    private static func fechaDeMovimiento(_ fecha: Date,
+                                          dentroDelCorte corte: Date) -> Date? {
+        let calendario = Calendar.current
+        let diaFecha = calendario.startOfDay(for: fecha)
+        let diaCorte = calendario.startOfDay(for: corte)
+        guard diaFecha > diaCorte else { return fecha }
+
+        guard let unAnioAntes = calendario.date(byAdding: .year,
+                                                 value: -1,
+                                                 to: fecha) else { return nil }
+        let diasHastaCorte = calendario.dateComponents(
+            [.day], from: calendario.startOfDay(for: unAnioAntes),
+            to: diaCorte).day ?? Int.max
+        return (0...62).contains(diasHastaCorte) ? unAnioAntes : nil
     }
 
     // MARK: - Rebanador de texto
