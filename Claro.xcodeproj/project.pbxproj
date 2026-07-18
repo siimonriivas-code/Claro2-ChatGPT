@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B10000000000000000000001 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000001 /* MLXLLM */; };
+		B10000000000000000000002 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000002 /* MLXLMCommon */; };
+		B10000000000000000000003 /* MLXHuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000003 /* MLXHuggingFace */; };
+		B10000000000000000000004 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000004 /* HuggingFace */; };
+		B10000000000000000000005 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000005 /* Tokenizers */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		8DFB27802FDBA0EE00D929A7 /* Claro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Claro.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +31,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B10000000000000000000001 /* MLXLLM in Frameworks */,
+				B10000000000000000000002 /* MLXLMCommon in Frameworks */,
+				B10000000000000000000003 /* MLXHuggingFace in Frameworks */,
+				B10000000000000000000004 /* HuggingFace in Frameworks */,
+				B10000000000000000000005 /* Tokenizers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +78,11 @@
 			);
 			name = Claro;
 			packageProductDependencies = (
+				B30000000000000000000001 /* MLXLLM */,
+				B30000000000000000000002 /* MLXLMCommon */,
+				B30000000000000000000003 /* MLXHuggingFace */,
+				B30000000000000000000004 /* HuggingFace */,
+				B30000000000000000000005 /* Tokenizers */,
 			);
 			productName = Claro;
 			productReference = 8DFB27802FDBA0EE00D929A7 /* Claro.app */;
@@ -95,6 +113,11 @@
 			);
 			mainGroup = 8DFB27772FDBA0EE00D929A7;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B20000000000000000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				B20000000000000000000002 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
+				B20000000000000000000003 /* XCRemoteSwiftPackageReference "swift-transformers" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8DFB27812FDBA0EE00D929A7 /* Products */;
 			projectDirPath = "";
@@ -124,6 +147,61 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B20000000000000000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.31.3;
+			};
+		};
+		B20000000000000000000002 /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-huggingface";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+		B20000000000000000000003 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B30000000000000000000001 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		B30000000000000000000002 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
+		B30000000000000000000003 /* MLXHuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXHuggingFace;
+		};
+		B30000000000000000000004 /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000002 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
+		};
+		B30000000000000000000005 /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000003 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8DFB27892FDBA0F000D929A7 /* Debug */ = {

@@ -19,10 +19,12 @@ struct ClaroInteligenteView: View {
     @Query(sort: \Movimiento.fecha, order: .reverse) private var movimientos: [Movimiento]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
+    @StateObject private var qwen = AdministradorQwen.shared
     @StateObject private var voz = ReconocedorVozLocal()
     @State private var mensajes: [MensajeClaro] = []
     @State private var pregunta = ""
     @State private var pensando = false
+    @State private var confirmarEliminacionQwen = false
     @FocusState private var escribiendo: Bool
 
     private let sugerencias = [
@@ -42,6 +44,7 @@ struct ClaroInteligenteView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 encabezado
+                panelQwen
                 conversacion
                 compositor
             }
@@ -63,6 +66,9 @@ struct ClaroInteligenteView: View {
             }
         }
         .aparienciaDeLaApp()
+        .task {
+            await qwen.prepararSiEstaDescargado()
+        }
         .onChange(of: voz.texto) { _, texto in
             guard voz.estaEscuchando || !texto.isEmpty else { return }
             pregunta = texto
@@ -73,6 +79,17 @@ struct ClaroInteligenteView: View {
                 Button("Entendido", role: .cancel) { voz.aviso = nil }
             } message: {
                 Text(voz.aviso ?? "")
+            }
+        .confirmationDialog(
+            "¿Eliminar Qwen del iPhone?",
+            isPresented: $confirmarEliminacionQwen,
+            titleVisibility: .visible) {
+                Button("Eliminar modelo", role: .destructive) {
+                    try? qwen.eliminarModelo()
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se liberarán aproximadamente 2.14 GB. Tus datos financieros y estados de cuenta no se tocarán.")
             }
     }
 
@@ -108,6 +125,89 @@ struct ClaroInteligenteView: View {
         .padding(.top, 10)
         .padding(.bottom, 12)
         .background(Tema.panel)
+    }
+
+    private var panelQwen: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "brain.head.profile")
+                    .font(.headline)
+                    .foregroundStyle(qwen.estaListo ? Tema.positivo : Tema.acento)
+                    .frame(width: 34, height: 34)
+                    .background((qwen.estaListo ? Tema.positivo : Tema.acento).opacity(0.13),
+                                in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Qwen3 4B · chat avanzado")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Tema.textoPrincipal)
+                    Text(qwen.descripcionEstado)
+                        .font(.caption)
+                        .foregroundStyle(Tema.textoSecundario)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 6)
+                controlQwen
+            }
+
+            if case .descargando(let avance) = qwen.estado {
+                ProgressView(value: avance)
+                    .tint(Tema.acento)
+            }
+
+            Text("Qwen solo responde en este chat; nunca identifica ni importa estados de cuenta.")
+                .font(.caption2)
+                .foregroundStyle(Tema.textoSecundario)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Tema.panelElevado.opacity(0.72))
+        .overlay(alignment: .bottom) { Divider().overlay(Tema.panelElevado) }
+    }
+
+    @ViewBuilder
+    private var controlQwen: some View {
+        switch qwen.estado {
+        case .noDescargado:
+            Button("Descargar") {
+                Task { await qwen.descargarYCargar() }
+            }
+            .font(.caption.weight(.bold))
+            .buttonStyle(.borderedProminent)
+            .tint(Tema.acento)
+            .accessibilityHint("Descarga opcional de aproximadamente 2.14 GB")
+
+        case .descargando:
+            ProgressView()
+                .tint(Tema.acento)
+
+        case .cargando:
+            ProgressView()
+                .tint(Tema.acento)
+
+        case .listo:
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Tema.positivo)
+                    .accessibilityLabel("Qwen listo")
+                Button {
+                    confirmarEliminacionQwen = true
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(Tema.textoSecundario)
+                }
+                .accessibilityLabel("Eliminar Qwen")
+            }
+
+        case .error:
+            Button("Reintentar") {
+                Task { await qwen.descargarYCargar() }
+            }
+            .font(.caption.weight(.bold))
+            .buttonStyle(.bordered)
+            .tint(Tema.acento)
+        }
     }
 
     private func miniIndicador(titulo: String, valor: String, color: Color) -> some View {
@@ -148,7 +248,9 @@ struct ClaroInteligenteView: View {
                     if pensando {
                         HStack(spacing: 8) {
                             ProgressView().tint(Tema.acento)
-                            Text("Analizando todos tus datos…")
+                            Text(qwen.estaListo
+                                 ? "Qwen está razonando con el resumen financiero…"
+                                 : "Analizando todos tus datos…")
                                 .font(.footnote)
                                 .foregroundStyle(Tema.textoSecundario)
                             Spacer()
@@ -220,7 +322,7 @@ struct ClaroInteligenteView: View {
                     .textSelection(.enabled)
                 if let fuente = mensaje.fuente {
                     Label(fuente.rawValue,
-                          systemImage: fuente == .appleIntelligence ? "apple.intelligence" : "function")
+                          systemImage: iconoFuente(fuente))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Tema.textoSecundario)
                 }
@@ -324,6 +426,14 @@ struct ClaroInteligenteView: View {
         let rango = NSRange(texto.startIndex..., in: texto)
         return expresion.stringByReplacingMatches(in: texto, range: rango,
                                                    withTemplate: "$ ••••")
+    }
+
+    private func iconoFuente(_ fuente: FuenteRespuestaClaro) -> String {
+        switch fuente {
+        case .qwen: return "brain.head.profile"
+        case .appleIntelligence: return "apple.intelligence"
+        case .motorLocal: return "function"
+        }
     }
 }
 
