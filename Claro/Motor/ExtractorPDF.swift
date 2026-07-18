@@ -14,6 +14,12 @@ import Vision
 
 enum ExtractorPDF {
 
+    /// Hey Banco necesita dos lecturas complementarias: la capa digital es
+    /// más fiable para el cuadro de pago, mientras que OCR reconstruye mejor
+    /// las filas de movimientos. Este prefijo permite que el analizador use
+    /// la copia digital solo para el resumen y nunca duplique movimientos.
+    static let prefijoResumenDigital = "[[CLARO:RESUMEN_DIGITAL]]"
+
     /// Huella irreversible del archivo para reconocer el mismo estado de
     /// cuenta sin conservar el PDF ni exponer sus datos.
     static func huellaSHA256(de url: URL) async -> String? {
@@ -57,6 +63,16 @@ enum ExtractorPDF {
             || textoDocumento.contains("HEYBANCO")
 
         var resultado: [String] = []
+
+        if esHeyBanco {
+            let resumenDigital = textosDigitales
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if tieneTextoUtil(resumenDigital) {
+                resultado.append(prefijoResumenDigital + "\n" + resumenDigital)
+            }
+        }
+
         for indice in 0..<documento.pageCount {
             guard let pagina = documento.page(at: indice) else { continue }
             let textoDigital = textosDigitales[indice]

@@ -265,31 +265,45 @@ enum AnalizadorEstadoDeCuenta {
     private static func analizarConReglas(paginas: [String]) -> ResumenDetectado {
         var resultado = ResumenDetectado()
         let textoCompleto = paginas.joined(separator: "\n")
+        let textoNormalizado = normalizarParaBusqueda(textoCompleto)
+        let esHeyBanco = textoNormalizado.contains("HEY BANCO")
+            || textoNormalizado.contains("HEYBANCO")
+
+        // En Hey Banco la capa digital conserva con precisión el cuadro de
+        // pago, pero sus tablas necesitan OCR. El extractor entrega ambas
+        // fuentes y marca la digital para que aquí se use solo como resumen.
+        let resumenDigital = paginas.first {
+            $0.hasPrefix(ExtractorPDF.prefijoResumenDigital)
+        }
+        let textoDeResumen = esHeyBanco ? (resumenDigital ?? textoCompleto) : textoCompleto
+        let textoDeMovimientos = paginas
+            .filter { !$0.hasPrefix(ExtractorPDF.prefijoResumenDigital) }
+            .joined(separator: "\n")
 
         resultado.bancoDetectado = detectarBanco(en: textoCompleto)
         resultado.ultimosDigitosDetectados = detectarUltimosDigitos(en: textoCompleto)
 
         // ── Datos generales del corte ──
-        resultado.fechaCorte = fechaCercaDe(["FECHA DE CORTE"], en: textoCompleto)
+        resultado.fechaCorte = fechaCercaDe(["FECHA DE CORTE"], en: textoDeResumen)
         resultado.fechaLimitePago = fechaCercaDe(
             ["FECHA LIMITE", "FECHA LÍMITE", "LIMITE DE PAGO", "LÍMITE DE PAGO", "PAGAR ANTES"],
-            en: textoCompleto)
+            en: textoDeResumen)
         resultado.pagoParaNoGenerarIntereses = montoCercaDe(
-            ["NO GENERAR INTERESES"], excluyendo: [], en: textoCompleto)
+            ["NO GENERAR INTERESES"], excluyendo: [], en: textoDeResumen)
         resultado.pagoMinimo = montoCercaDe(
             ["PAGO MINIMO", "PAGO MÍNIMO"],
             excluyendo: ["COMPRAS", "DIFERIDOS", "MESES"],
-            en: textoCompleto)
+            en: textoDeResumen)
         resultado.saldoAlCorte = montoCercaDe(
             ["SALDO DEUDOR TOTAL", "SALDO ACTUAL AL CORTE", "SALDO AL CORTE",
              "SALDO ACTUAL", "SALDO TOTAL"],
-            excluyendo: [], en: textoCompleto)
+            excluyendo: [], en: textoDeResumen)
 
         // Para fechas sin año (Liverpool escribe "03-JUL"), usamos el del corte
         let anioCorte = Calendar.current.component(.year,
                                                    from: resultado.fechaCorte ?? .now)
 
-        for lineaCruda in textoCompleto.components(separatedBy: .newlines) {
+        for lineaCruda in textoDeMovimientos.components(separatedBy: .newlines) {
             let linea = lineaCruda.trimmingCharacters(in: .whitespaces)
             guard linea.count > 10 else { continue }
 
@@ -339,7 +353,8 @@ enum AnalizadorEstadoDeCuenta {
                 .contains { mayus.contains($0) }
             let esCargoBancario = ["INTERESES", "IVA DE INTER", "COMISION", "COMISIÓN"]
                 .contains { mayus.contains($0) }
-            guard !esPago && !esCargoBancario else { continue }
+            let esDesgloseHey = esHeyBanco && esDesgloseDePlanHey(mayus)
+            guard !esPago && !esCargoBancario && !esDesgloseHey else { continue }
 
             // ¿Trae contador "14 DE 20" al inicio? → es mensualidad
             var esMSI = false
@@ -483,15 +498,45 @@ enum AnalizadorEstadoDeCuenta {
 
     /// Separa un contador inicial tipo "14 DE 20 COMERCIO" → (COMERCIO, 14, 20)
     private static func separarContador(_ texto: String) -> (String, Int?, Int?) {
-        guard let regex = try? NSRegularExpression(pattern:
+        if let regex = try? NSRegularExpression(pattern:
             "^(\\d{1,2})\\s+[Dd][Ee]\\s+(\\d{1,2})\\s+(.+)$"),
-              let m = regex.firstMatch(in: texto,
-                                       range: NSRange(texto.startIndex..., in: texto)),
-              let r1 = Range(m.range(at: 1), in: texto),
-              let r2 = Range(m.range(at: 2), in: texto),
-              let r3 = Range(m.range(at: 3), in: texto)
-        else { return (texto, nil, nil) }
-        return (String(texto[r3]), Int(texto[r1]), Int(texto[r2]))
+           let m = regex.firstMatch(in: texto,
+                                    range: NSRange(texto.startIndex..., in: texto)),
+           let r1 = Range(m.range(at: 1), in: texto),
+           let r2 = Range(m.range(at: 2), in: texto),
+           let r3 = Range(m.range(at: 3), in: texto) {
+            return (String(texto[r3]), Int(texto[r1]), Int(texto[r2]))
+        }
+
+        // Hey y algunos comercios colocan el contador dentro del texto:
+        // "PD (7/12) COMERCIO". Se elimina solo el contador.
+        if let regex = try? NSRegularExpression(pattern:
+            "^(.*?)\\(\\s*(\\d{1,2})\\s*/\\s*(\\d{1,2})\\s*\\)\\s*(.*)$"),
+           let m = regex.firstMatch(in: texto,
+                                    range: NSRange(texto.startIndex..., in: texto)),
+           let prefijo = Range(m.range(at: 1), in: texto),
+           let r1 = Range(m.range(at: 2), in: texto),
+           let r2 = Range(m.range(at: 3), in: texto),
+           let sufijo = Range(m.range(at: 4), in: texto) {
+            let comercio = (String(texto[prefijo]) + " " + String(texto[sufijo]))
+                .trimmingCharacters(in: .whitespaces)
+            return (comercio, Int(texto[r1]), Int(texto[r2]))
+        }
+
+        return (texto, nil, nil)
+    }
+
+    /// Hey repite la mensualidad en la tabla principal y después la desglosa
+    /// en capital, intereses e IVA. La tabla ya trae el pago requerido total;
+    /// importar también estas líneas duplicaría el mismo plan.
+    private static func esDesgloseDePlanHey(_ descripcionNormalizada: String) -> Bool {
+        guard descripcionNormalizada.range(
+            of: #"\(\s*\d{1,2}\s*/\s*\d{1,2}\s*\)"#,
+            options: .regularExpression) != nil else { return false }
+
+        return descripcionNormalizada.range(
+            of: #"(?:^|\s)(?:PD|INT\.?\s+(?:DE\s+)?PD|IVA\s+INT\.?(?:\s+DE)?\s+PD)\s*\("#,
+            options: .regularExpression) != nil
     }
 
     /// Limpia sufijos y prefijos repetitivos del comercio:
@@ -633,9 +678,12 @@ enum AnalizadorEstadoDeCuenta {
         let exclusionesNormalizadas = excluyendo.map { normalizarParaBusqueda($0) }
         for indice in lineas.indices {
             let lineaNormalizada = normalizarParaBusqueda(lineas[indice])
-            guard clavesNormalizadas.contains(where: { lineaNormalizada.contains($0) })
+            let siguiente = indice + 1 < lineas.count
+                ? normalizarParaBusqueda(lineas[indice + 1]) : ""
+            let ventanaDeClave = lineaNormalizada + " " + siguiente
+            guard clavesNormalizadas.contains(where: { ventanaDeClave.contains($0) })
             else { continue }
-            if exclusionesNormalizadas.contains(where: { lineaNormalizada.contains($0) }) {
+            if exclusionesNormalizadas.contains(where: { ventanaDeClave.contains($0) }) {
                 continue
             }
 
