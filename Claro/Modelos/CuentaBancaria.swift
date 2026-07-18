@@ -42,7 +42,7 @@ final class CuentaBancaria {
     init(nombre: String, tipo: TipoCuenta, saldoInicial: Double, fechaSaldoInicial: Date = .now, banco: Banco? = nil) {
         self.nombre = nombre
         self.tipoRaw = tipo.rawValue
-        self.saldoInicial = saldoInicial
+        self.saldoInicial = saldoInicial.redondeadoAMoneda
         self.fechaSaldoInicial = fechaSaldoInicial
         self.banco = banco
     }

@@ -16,6 +16,10 @@ import Charts
 struct AnalisisView: View {
     @Query(sort: \Movimiento.fecha, order: .reverse) private var movimientos: [Movimiento]
     @Query private var planes: [PlanMSI]
+    @Query private var cuentas: [CuentaBancaria]
+    @Query private var tarjetas: [TarjetaCredito]
+    @Query private var personas: [Persona]
+    @Query private var deudas: [Deuda]
 
     @State private var mostrandoConfiguracion = false
 
@@ -103,10 +107,72 @@ struct AnalisisView: View {
               .sorted { $0.fechaCompra > $1.fechaCompra }
     }
 
+    private var recurrentes: [CargoRecurrenteDetectado] {
+        MotorPredictivo.recurrentes(movimientos: movimientos)
+    }
+
+    private var patrimonio: Double {
+        MotorPredictivo.patrimonioActual(cuentas: cuentas, tarjetas: tarjetas,
+                                         personas: personas, deudas: deudas)
+    }
+
+    private var disponible30: Double {
+        MotorPredictivo.disponibleEn30Dias(cuentas: cuentas, tarjetas: tarjetas,
+                                           recurrentes: recurrentes)
+    }
+
+    private var historialPatrimonio: [PuntoPatrimonio] {
+        MotorPredictivo.historialPatrimonio(cuentas: cuentas, tarjetas: tarjetas,
+                                            personas: personas, deudas: deudas)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+
+                    TituloSeccion(texto: "Panorama financiero")
+                    Panel {
+                        VStack(spacing: 12) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("PATRIMONIO ESTIMADO")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(Tema.textoSecundario)
+                                    Text(patrimonio.comoDinero)
+                                        .font(.title2.bold())
+                                        .foregroundStyle(patrimonio >= 0
+                                                         ? Tema.positivo : Tema.urgente)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text("DISPONIBLE EN 30 DÍAS")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(Tema.textoSecundario)
+                                    Text(disponible30.comoDinero)
+                                        .font(.headline)
+                                        .foregroundStyle(disponible30 >= 0
+                                                         ? Tema.acento : Tema.urgente)
+                                }
+                            }
+                            if historialPatrimonio.count > 1 {
+                                Chart(historialPatrimonio) { punto in
+                                    LineMark(x: .value("Mes", punto.id),
+                                             y: .value("Patrimonio", punto.valor))
+                                        .foregroundStyle(Tema.positivo)
+                                    AreaMark(x: .value("Mes", punto.id),
+                                             y: .value("Patrimonio", punto.valor))
+                                        .foregroundStyle(Tema.positivo.opacity(0.12))
+                                }
+                                .chartXAxis {
+                                    AxisMarks(values: .stride(by: .month)) {
+                                        AxisValueLabel(format: .dateTime.month(.abbreviated))
+                                    }
+                                }
+                                .frame(height: 150)
+                            }
+                        }
+                    }
 
                     // ── 🍩 Dona: gastos del mes por categoría ──
                     TituloSeccion(texto: "Este mes por categoría (tu parte)")
@@ -193,6 +259,33 @@ struct AnalisisView: View {
                                 }
                             }
                             .frame(height: 220)
+                        }
+                    }
+
+                    if !recurrentes.isEmpty {
+                        TituloSeccion(texto: "Cargos recurrentes detectados")
+                        Panel {
+                            VStack(spacing: 0) {
+                                ForEach(recurrentes.prefix(8)) { cargo in
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(cargo.comercio)
+                                                .font(.subheadline.weight(.medium))
+                                                .lineLimit(1)
+                                            Text("Próximo estimado: \(cargo.siguienteFechaEstimada.formatted(date: .abbreviated, time: .omitted))")
+                                                .font(.caption2)
+                                                .foregroundStyle(Tema.textoSecundario)
+                                        }
+                                        Spacer()
+                                        Text(cargo.promedio.comoDinero)
+                                            .font(.subheadline.weight(.semibold))
+                                    }
+                                    .padding(.vertical, 7)
+                                    if cargo.id != recurrentes.prefix(8).last?.id {
+                                        Divider().overlay(Tema.panelElevado)
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -283,7 +376,13 @@ struct AnalisisView: View {
             .background(Tema.fondo.ignoresSafeArea())
             .navigationTitle("Análisis")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink {
+                        PlanificacionView()
+                    } label: {
+                        Image(systemName: "target")
+                            .foregroundStyle(Tema.positivo)
+                    }
                     Button {
                         mostrandoConfiguracion = true
                     } label: {

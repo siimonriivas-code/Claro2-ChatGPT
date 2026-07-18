@@ -138,7 +138,7 @@ struct EditarCuentaView: View {
                         cuenta.nombre = nombre.trimmingCharacters(in: .whitespaces)
                         cuenta.tipo = tipo
                         cuenta.banco = bancoSeleccionado
-                        cuenta.saldoInicial = saldoInicial ?? 0
+                        cuenta.saldoInicial = (saldoInicial ?? 0).redondeadoAMoneda
                         cuenta.fechaSaldoInicial = fecha
                         cerrar()
                     }
@@ -246,10 +246,10 @@ struct EditarTarjetaView: View {
                         tarjeta.nombre = nombre.trimmingCharacters(in: .whitespaces)
                         tarjeta.ultimosDigitos = ultimosDigitos
                         tarjeta.banco = bancoSeleccionado
-                        tarjeta.limiteCredito = limiteCredito ?? 0
+                        tarjeta.limiteCredito = (limiteCredito ?? 0).redondeadoAMoneda
                         tarjeta.diaCorte = diaCorte
                         tarjeta.diaLimitePago = diaLimitePago
-                        tarjeta.saldoInicial = saldoInicial ?? 0
+                        tarjeta.saldoInicial = (saldoInicial ?? 0).redondeadoAMoneda
                         tarjeta.colorHex = colorHex
                         cerrar()
                     }

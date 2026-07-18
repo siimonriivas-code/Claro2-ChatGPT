@@ -15,6 +15,7 @@ struct ConfiguracionView: View {
     @AppStorage("bloqueoActivado") private var bloqueoActivado = false
     @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
     @AppStorage("importarConIA") private var importarConIA = true
+    @AppStorage("apariencia") private var apariencia = Apariencia.oscuro.rawValue
 
     @State private var confirmandoBorrado = false
 
@@ -29,6 +30,11 @@ struct ConfiguracionView: View {
                 Section {
                     Toggle("Bloquear con Face ID / código", isOn: $bloqueoActivado)
                     Toggle("Ocultar montos (••••)", isOn: $montosOcultos)
+                    Picker("Apariencia", selection: $apariencia) {
+                        ForEach(Apariencia.allCases, id: \.rawValue) { opcion in
+                            Text(opcion.titulo).tag(opcion.rawValue)
+                        }
+                    }
                 } header: {
                     Text("Seguridad y privacidad")
                 } footer: {
@@ -43,7 +49,7 @@ struct ConfiguracionView: View {
                                 ProgramadorDeNotificaciones.reprogramar(tarjetas: tarjetas,
                                                                         personas: personas)
                             } else {
-                                ProgramadorDeNotificaciones.reprogramar(tarjetas: [])
+                                ProgramadorDeNotificaciones.cancelarTodas()
                             }
                         }
                 } header: {
@@ -57,10 +63,20 @@ struct ConfiguracionView: View {
                 } header: {
                     Text("Importación de estados de cuenta")
                 } footer: {
-                    Text("Si la IA de tu iPhone lee mal el formato de tu banco, apágala: se usará el lector de reglas, afinado para bancos mexicanos (BBVA, Banamex). Puedes alternar y comparar cuando quieras.")
+                    Text("Hey Banco y Liverpool usan automáticamente el lector especializado y OCR local. En otros bancos puedes activar Apple Intelligence como apoyo.")
                 }
 
                 Section {
+                    NavigationLink {
+                        RespaldoView()
+                    } label: {
+                        Label("Respaldo y restauración", systemImage: "externaldrive.fill")
+                    }
+                    NavigationLink {
+                        HistorialImportacionesView()
+                    } label: {
+                        Label("Historial de importaciones", systemImage: "clock.arrow.circlepath")
+                    }
                     Button(role: .destructive) {
                         confirmandoBorrado = true
                     } label: {
@@ -97,7 +113,7 @@ struct ConfiguracionView: View {
                 }
                 Button("No", role: .cancel) { }
             } message: {
-                Text("Se eliminará todo tu registro financiero de este iPhone. No hay respaldo ni forma de deshacerlo.")
+                Text("Se eliminará todo tu registro financiero de este iPhone. Solo podrás recuperarlo si antes creaste un respaldo.")
             }
         }
         .aparienciaDeLaApp()
@@ -106,26 +122,8 @@ struct ConfiguracionView: View {
     /// Borra TODO en orden seguro (hijos primero, padres después)
     /// y vuelve a sembrar las categorías de fábrica.
     private func borrarTodo() {
-        try? contexto.delete(model: RegistroDeCambio.self)
-        try? contexto.delete(model: Participacion.self)
-        try? contexto.delete(model: CompraCompartida.self)
-        try? contexto.delete(model: MensualidadMSI.self)
-        try? contexto.delete(model: PlanMSI.self)
-        try? contexto.delete(model: EstadoDeCuenta.self)
-        try? contexto.delete(model: Movimiento.self)
-        try? contexto.delete(model: Deuda.self)
-        try? contexto.delete(model: TarjetaCredito.self)
-        try? contexto.delete(model: CuentaBancaria.self)
-        try? contexto.delete(model: Banco.self)
-        try? contexto.delete(model: Persona.self)
-        try? contexto.delete(model: Categoria.self)
-        try? contexto.save()
-
-        // Dejar la app como recién instalada: categorías de fábrica
-        Sembrador.sembrarSiHaceFalta(contexto: contexto)
-
-        // Y sin recordatorios huérfanos de tarjetas que ya no existen
-        ProgramadorDeNotificaciones.reprogramar(tarjetas: [])
+        try? AdministradorDatos.borrarTodo(contexto: contexto,
+                                           restaurarCategorias: true)
     }
 
     private func ley(_ numero: String, _ texto: String) -> some View {

@@ -42,10 +42,10 @@ final class TarjetaCredito {
          banco: Banco? = nil) {
         self.nombre = nombre
         self.ultimosDigitos = ultimosDigitos
-        self.limiteCredito = limiteCredito
+        self.limiteCredito = limiteCredito.redondeadoAMoneda
         self.diaCorte = diaCorte
         self.diaLimitePago = diaLimitePago
-        self.saldoInicial = saldoInicial
+        self.saldoInicial = saldoInicial.redondeadoAMoneda
         self.fechaSaldoInicial = fechaSaldoInicial
         self.colorHex = colorHex
         self.banco = banco

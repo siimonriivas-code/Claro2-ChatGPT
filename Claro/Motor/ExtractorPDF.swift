@@ -7,11 +7,28 @@
 //
 
 import Foundation
+import CryptoKit
 import PDFKit
 import UIKit
 import Vision
 
 enum ExtractorPDF {
+
+    /// Huella irreversible del archivo para reconocer el mismo estado de
+    /// cuenta sin conservar el PDF ni exponer sus datos.
+    static func huellaSHA256(de url: URL) async -> String? {
+        await Task.detached(priority: .utility) {
+            let accesoConcedido = url.startAccessingSecurityScopedResource()
+            defer {
+                if accesoConcedido { url.stopAccessingSecurityScopedResource() }
+            }
+            guard let datos = try? Data(contentsOf: url,
+                                        options: [.mappedIfSafe]) else { return nil }
+            return SHA256.hash(data: datos)
+                .map { String(format: "%02x", $0) }
+                .joined()
+        }.value
+    }
 
     /// Devuelve el texto del PDF, página por página. PDFKit es la primera
     /// opción; Vision entra automáticamente cuando el documento es una

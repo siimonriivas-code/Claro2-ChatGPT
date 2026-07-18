@@ -18,6 +18,7 @@ final class PlanMSI {
     var montoTotal: Double      // 8,000
     var numeroMeses: Int        // 4
     var fechaCompra: Date
+    var importacionID: UUID? = nil
 
     var tarjeta: TarjetaCredito?
 
@@ -49,7 +50,7 @@ final class PlanMSI {
     init(detalle: String, montoTotal: Double, numeroMeses: Int,
          fechaCompra: Date = .now, tarjeta: TarjetaCredito? = nil) {
         self.detalle = detalle
-        self.montoTotal = montoTotal
+        self.montoTotal = montoTotal.redondeadoAMoneda
         self.numeroMeses = numeroMeses
         self.fechaCompra = fechaCompra
         self.tarjeta = tarjeta
@@ -69,6 +70,7 @@ final class MensualidadMSI {
     // el Motor financiero (Etapa 3/4) al verificar los pagos registrados.
     // Ninguna pantalla lo cambia a mano.
     var cubierta: Bool
+    var importacionID: UUID? = nil
 
     var plan: PlanMSI?
 
@@ -76,7 +78,7 @@ final class MensualidadMSI {
 
     init(numero: Int, monto: Double, plan: PlanMSI? = nil) {
         self.numero = numero
-        self.monto = monto
+        self.monto = monto.redondeadoAMoneda
         self.cubierta = false
         self.plan = plan
     }

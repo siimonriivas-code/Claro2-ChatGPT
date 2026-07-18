@@ -29,6 +29,8 @@ struct MovimientoDetectado: Identifiable {
 }
 
 struct ResumenDetectado {
+    var bancoDetectado: String?
+    var ultimosDigitosDetectados: String?
     var fechaCorte: Date?
     var fechaLimitePago: Date?
     var pagoParaNoGenerarIntereses: Double?
@@ -87,6 +89,9 @@ enum AnalizadorEstadoDeCuenta {
     private static func completar(_ resultadoIA: ResumenDetectado,
                                   con reglas: ResumenDetectado) -> ResumenDetectado {
         var resultado = resultadoIA
+        resultado.bancoDetectado = resultado.bancoDetectado ?? reglas.bancoDetectado
+        resultado.ultimosDigitosDetectados = resultado.ultimosDigitosDetectados
+            ?? reglas.ultimosDigitosDetectados
         resultado.fechaCorte = resultado.fechaCorte ?? reglas.fechaCorte
         resultado.fechaLimitePago = resultado.fechaLimitePago ?? reglas.fechaLimitePago
         resultado.pagoParaNoGenerarIntereses = resultado.pagoParaNoGenerarIntereses
@@ -260,6 +265,9 @@ enum AnalizadorEstadoDeCuenta {
     private static func analizarConReglas(paginas: [String]) -> ResumenDetectado {
         var resultado = ResumenDetectado()
         let textoCompleto = paginas.joined(separator: "\n")
+
+        resultado.bancoDetectado = detectarBanco(en: textoCompleto)
+        resultado.ultimosDigitosDetectados = detectarUltimosDigitos(en: textoCompleto)
 
         // ── Datos generales del corte ──
         resultado.fechaCorte = fechaCercaDe(["FECHA DE CORTE"], en: textoCompleto)
@@ -704,6 +712,46 @@ enum AnalizadorEstadoDeCuenta {
                       locale: Locale(identifier: "es_MX"))
             .uppercased()
             .replacingOccurrences(of: "\u{00A0}", with: " ")
+    }
+
+    private static func detectarBanco(en texto: String) -> String? {
+        let normalizado = normalizarParaBusqueda(texto)
+        let bancos: [(claves: [String], nombre: String)] = [
+            (["HEY BANCO", "HEYBANCO"], "Hey Banco"),
+            (["LIVERPOOL"], "Liverpool"),
+            (["CITIBANAMEX", "BANAMEX"], "Banamex"),
+            (["BBVA"], "BBVA"),
+            (["BANORTE"], "Banorte"),
+            (["SANTANDER"], "Santander"),
+            (["HSBC"], "HSBC"),
+            (["SCOTIABANK"], "Scotiabank"),
+            (["AMERICAN EXPRESS"], "American Express"),
+            (["NU MEXICO", "NU BANK", "NU PAGOS"], "Nu"),
+            (["INBURSA"], "Inbursa"),
+            (["BANCO AZTECA"], "Banco Azteca")
+        ]
+        return bancos.first { banco in
+            banco.claves.contains { normalizado.contains($0) }
+        }?.nombre
+    }
+
+    private static func detectarUltimosDigitos(en texto: String) -> String? {
+        let patrones = [
+            #"(?:TERMINACION|TERMINACIÓN|ULTIMOS 4|ÚLTIMOS 4|TARJETA|CUENTA)[^\n]{0,45}?(\d{4})(?!\d)"#,
+            #"(?:\*|X|•){2,}\s*(\d{4})(?!\d)"#
+        ]
+        for patron in patrones {
+            guard let regex = try? NSRegularExpression(
+                pattern: patron, options: [.caseInsensitive]) else { continue }
+            let rango = NSRange(texto.startIndex..., in: texto)
+            for coincidencia in regex.matches(in: texto, range: rango) {
+                guard let r = Range(coincidencia.range(at: 1), in: texto) else { continue }
+                let valor = String(texto[r])
+                // Evita tomar años impresos cerca de textos genéricos.
+                if !(2000...2100).contains(Int(valor) ?? 0) { return valor }
+            }
+        }
+        return nil
     }
 
     private static func esEtiquetaDeResumen(_ textoNormalizado: String) -> Bool {

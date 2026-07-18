@@ -19,10 +19,14 @@ struct RaizView: View {
 
     @Query private var tarjetas: [TarjetaCredito]
     @Query private var personas: [Persona]
+    @Query private var bancos: [Banco]
+    @Query private var cuentas: [CuentaBancaria]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
 
     @State private var desbloqueada = false
+    @State private var mostrandoBienvenida = false
+    @AppStorage("onboardingCompletado") private var onboardingCompletado = false
 
     var body: some View {
         ZStack {
@@ -56,6 +60,10 @@ struct RaizView: View {
         .aparienciaDeLaApp()
         .task {
             Sembrador.sembrarSiHaceFalta(contexto: contexto)
+            if !onboardingCompletado && bancos.isEmpty
+                && cuentas.isEmpty && tarjetas.isEmpty {
+                mostrandoBienvenida = true
+            }
             if notificacionesActivadas {
                 ProgramadorDeNotificaciones.reprogramar(tarjetas: tarjetas,
                                                         personas: personas)
@@ -70,6 +78,12 @@ struct RaizView: View {
                 // Al regresar, los recordatorios se actualizan a la realidad
                 ProgramadorDeNotificaciones.reprogramar(tarjetas: tarjetas,
                                                         personas: personas)
+            }
+        }
+        .fullScreenCover(isPresented: $mostrandoBienvenida) {
+            BienvenidaClaroView {
+                onboardingCompletado = true
+                mostrandoBienvenida = false
             }
         }
     }

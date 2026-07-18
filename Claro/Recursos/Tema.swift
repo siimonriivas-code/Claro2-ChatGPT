@@ -126,6 +126,14 @@ private struct ModificadorApariencia: ViewModifier {
 // MARK: - Formato de dinero (pesos mexicanos)
 
 extension Double {
+    /// Normaliza el valor a centavos antes de guardarlo o calcular con él.
+    /// Conserva compatibilidad con la base existente y evita fracciones
+    /// invisibles de centavo propias de los números de punto flotante.
+    var redondeadoAMoneda: Double {
+        guard isFinite else { return 0 }
+        return (self * 100).rounded() / 100
+    }
+
     /// Convierte 4250.5 en "$4,250.50".
     /// Si el modo privacidad está activo (ojo 👁️ en Inicio o en
     /// Configuración), devuelve "$ ••••" en TODA la app.
@@ -138,6 +146,6 @@ extension Double {
         f.locale = Locale(identifier: "es_MX")
         f.minimumFractionDigits = 2
         f.maximumFractionDigits = 2
-        return f.string(from: NSNumber(value: self)) ?? "$0.00"
+        return f.string(from: NSNumber(value: redondeadoAMoneda)) ?? "$0.00"
     }
 }

@@ -14,6 +14,17 @@ import UserNotifications
 
 enum ProgramadorDeNotificaciones {
 
+    private static let claveIdentificadoresAutomaticos =
+        "identificadoresNotificacionesAutomaticas"
+
+    enum ErrorNotificacion: LocalizedError {
+        case permisoDenegado
+
+        var errorDescription: String? {
+            "Las notificaciones están desactivadas para Claro. Puedes habilitarlas en Ajustes del iPhone."
+        }
+    }
+
     /// Pide permiso al sistema para enviar notificaciones (solo la 1a vez).
     static func pedirPermiso() {
         UNUserNotificationCenter.current()
@@ -25,7 +36,29 @@ enum ProgramadorDeNotificaciones {
     static func reprogramar(tarjetas: [TarjetaCredito],
                             personas: [Persona] = []) {
         let centro = UNUserNotificationCenter.current()
-        centro.removeAllPendingNotificationRequests()
+
+        // Retiramos únicamente los avisos automáticos creados por Claro.
+        // Los recordatorios puntuales que el usuario programó para cobrar
+        // a una persona se conservan.
+        let anteriores = UserDefaults.standard.stringArray(
+            forKey: claveIdentificadoresAutomaticos
+        ) ?? []
+        var nuevos: [String] = []
+
+        for tarjeta in tarjetas {
+            guard let estado = tarjeta.estadoDeCuentaVigente,
+                  estado.faltaPorCubrir > 0 else { continue }
+            nuevos.append(contentsOf: [10, 5, 3, 1, 0].map {
+                identificadorPago(tarjeta: tarjeta, dias: $0)
+            })
+        }
+        if personas.contains(where: { $0.saldoPendiente > 0 }) {
+            nuevos.append("cobros-semanales")
+        }
+
+        centro.removePendingNotificationRequests(
+            withIdentifiers: Array(Set(anteriores + nuevos))
+        )
 
         for tarjeta in tarjetas {
             guard let estado = tarjeta.estadoDeCuentaVigente,
@@ -35,6 +68,46 @@ enum ProgramadorDeNotificaciones {
         }
 
         programarCobrosPendientes(personas: personas, centro: centro)
+        UserDefaults.standard.set(nuevos,
+                                  forKey: claveIdentificadoresAutomaticos)
+    }
+
+    /// Se usa al apagar las notificaciones desde Configuración o al borrar
+    /// todos los datos. En ese caso sí se retiran avisos automáticos y manuales.
+    static func cancelarTodas() {
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UserDefaults.standard.removeObject(
+            forKey: claveIdentificadoresAutomaticos
+        )
+    }
+
+    /// Crea un aviso puntual para cobrarle a una persona. Complementa el
+    /// resumen semanal automático con una fecha elegida por el usuario.
+    static func programarCobro(persona: Persona, fecha: Date) async throws {
+        let centro = UNUserNotificationCenter.current()
+        let autorizado = try await centro.requestAuthorization(
+            options: [.alert, .sound, .badge]
+        )
+        guard autorizado else { throw ErrorNotificacion.permisoDenegado }
+
+        let contenido = UNMutableNotificationContent()
+        contenido.title = "Recordatorio de cobro · \(persona.nombre)"
+        contenido.body = "Saldo pendiente: \(max(0, persona.saldoPendiente).comoDinero)."
+        contenido.sound = .default
+
+        let componentes = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: fecha
+        )
+        let solicitud = UNNotificationRequest(
+            identifier: "cobro-\(UUID().uuidString)",
+            content: contenido,
+            trigger: UNCalendarNotificationTrigger(
+                dateMatching: componentes,
+                repeats: false
+            )
+        )
+        try await centro.add(solicitud)
     }
 
     /// Recordatorio semanal (lunes 10:00 am) de lo que te deben.
@@ -111,10 +184,15 @@ enum ProgramadorDeNotificaciones {
             let disparador = UNCalendarNotificationTrigger(
                 dateMatching: componentes, repeats: false)
             let peticion = UNNotificationRequest(
-                identifier: "pago-\(tarjeta.nombre)-\(dias)",
+                identifier: identificadorPago(tarjeta: tarjeta, dias: dias),
                 content: contenido,
                 trigger: disparador)
             centro.add(peticion)
         }
+    }
+
+    private static func identificadorPago(tarjeta: TarjetaCredito,
+                                          dias: Int) -> String {
+        "pago-\(tarjeta.nombre)-\(dias)"
     }
 }

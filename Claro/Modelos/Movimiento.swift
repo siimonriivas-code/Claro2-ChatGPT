@@ -40,6 +40,10 @@ final class Movimiento {
     var creadoEl: Date
     var editadoEl: Date?
 
+    // Identifica los movimientos creados juntos al importar un PDF. Es
+    // opcional para conservar sin cambios los datos de versiones anteriores.
+    var importacionID: UUID? = nil
+
     // Vínculos (todos opcionales: cada tipo de movimiento usa los que necesita)
     var cuenta: CuentaBancaria?        // cuenta principal (de donde sale o entra dinero)
     var cuentaDestino: CuentaBancaria? // solo transferencias: cuenta que recibe
@@ -79,7 +83,7 @@ final class Movimiento {
          planMSI: PlanMSI? = nil,
          deuda: Deuda? = nil) {
         self.tipoRaw = tipo.rawValue
-        self.monto = monto
+        self.monto = monto.redondeadoAMoneda
         self.fecha = fecha
         self.detalle = detalle
         self.estadoRaw = EstadoMovimiento.activo.rawValue

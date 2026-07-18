@@ -16,6 +16,7 @@ struct PersonaDetalleView: View {
     @Environment(\.dismiss) private var cerrar
 
     @State private var mostrandoCobro = false
+    @State private var mostrandoRecordatorio = false
     @State private var mostrandoEdicion = false
     @State private var confirmandoEliminacion = false
 
@@ -64,6 +65,31 @@ struct PersonaDetalleView: View {
                     .background(Tema.positivo.opacity(0.15),
                                 in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
+
+                HStack(spacing: 10) {
+                    ShareLink(item: mensajeDeCobro) {
+                        Label("Compartir cobro", systemImage: "square.and.arrow.up")
+                            .font(.footnote.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Tema.panel,
+                                        in: RoundedRectangle(cornerRadius: 13,
+                                                             style: .continuous))
+                    }
+
+                    Button {
+                        mostrandoRecordatorio = true
+                    } label: {
+                        Label("Recordármelo", systemImage: "bell.badge")
+                            .font(.footnote.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(Tema.panel,
+                                        in: RoundedRectangle(cornerRadius: 13,
+                                                             style: .continuous))
+                    }
+                }
+                .foregroundStyle(Tema.acento)
 
                 TituloSeccion(texto: "Sus partes en compras")
                 if participacionesOrdenadas.isEmpty {
@@ -155,6 +181,9 @@ struct PersonaDetalleView: View {
         .sheet(isPresented: $mostrandoCobro) {
             CobroRecibidoView(personaInicial: persona)
         }
+        .sheet(isPresented: $mostrandoRecordatorio) {
+            RecordatorioCobroView(persona: persona)
+        }
         .sheet(isPresented: $mostrandoEdicion) {
             EditarPersonaView(persona: persona)
         }
@@ -177,5 +206,85 @@ struct PersonaDetalleView: View {
         }
         contexto.delete(persona)
         cerrar()
+    }
+
+    private var mensajeDeCobro: String {
+        "Hola, \(persona.nombre). Te comparto el recordatorio del saldo pendiente de \(max(0, persona.saldoPendiente).comoDinero). Gracias."
+    }
+}
+
+private struct RecordatorioCobroView: View {
+    let persona: Persona
+
+    @Environment(\.dismiss) private var cerrar
+    @State private var fecha: Date
+    @State private var guardando = false
+    @State private var mensajeError: String?
+
+    init(persona: Persona) {
+        self.persona = persona
+        let calendario = Calendar.current
+        let manana = calendario.date(byAdding: .day, value: 1, to: .now) ?? .now
+        var componentes = calendario.dateComponents([.year, .month, .day],
+                                                     from: manana)
+        componentes.hour = 10
+        _fecha = State(initialValue: calendario.date(from: componentes) ?? manana)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Recordatorio para \(persona.nombre)") {
+                    LabeledContent("Saldo") {
+                        Text(max(0, persona.saldoPendiente).comoDinero)
+                    }
+                    DatePicker("Fecha y hora",
+                               selection: $fecha,
+                               in: Date.now...,
+                               displayedComponents: [.date, .hourAndMinute])
+                }
+
+                if let mensajeError {
+                    Section {
+                        Label(mensajeError,
+                              systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Tema.advertencia)
+                    }
+                }
+            }
+            .navigationTitle("Recordar cobro")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { cerrar() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(guardando ? "Guardando…" : "Programar") {
+                        programar()
+                    }
+                    .disabled(guardando || fecha <= .now)
+                }
+            }
+        }
+        .aparienciaDeLaApp()
+    }
+
+    private func programar() {
+        guardando = true
+        mensajeError = nil
+        Task {
+            do {
+                try await ProgramadorDeNotificaciones.programarCobro(
+                    persona: persona,
+                    fecha: fecha
+                )
+                await MainActor.run { cerrar() }
+            } catch {
+                await MainActor.run {
+                    mensajeError = error.localizedDescription
+                    guardando = false
+                }
+            }
+        }
     }
 }

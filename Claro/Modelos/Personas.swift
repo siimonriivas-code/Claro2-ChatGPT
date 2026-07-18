@@ -49,12 +49,13 @@ final class CompraCompartida {
 @Model
 final class Participacion {
     var monto: Double          // cuánto le corresponde a esa persona
+    var importacionID: UUID? = nil
 
     var persona: Persona?
     var compra: CompraCompartida?
 
     init(monto: Double, persona: Persona? = nil, compra: CompraCompartida? = nil) {
-        self.monto = monto
+        self.monto = monto.redondeadoAMoneda
         self.persona = persona
         self.compra = compra
     }

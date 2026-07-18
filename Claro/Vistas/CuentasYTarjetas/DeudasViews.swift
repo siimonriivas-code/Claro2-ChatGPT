@@ -364,7 +364,7 @@ struct EditarDeudaView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
                         deuda.acreedor = acreedor.trimmingCharacters(in: .whitespaces)
-                        deuda.montoOriginal = monto ?? 0
+                        deuda.montoOriginal = (monto ?? 0).redondeadoAMoneda
                         deuda.fecha = fecha
                         deuda.notas = notas.trimmingCharacters(in: .whitespaces)
                         cerrar()

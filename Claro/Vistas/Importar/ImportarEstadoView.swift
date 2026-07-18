@@ -36,6 +36,12 @@ struct ImportarEstadoView: View {
     @State private var pagoMinimo: Double?
     @State private var saldoAlCorte: Double?
     @State private var usoIA = false
+    @State private var bancoDetectado: String?
+    @State private var ultimosDigitosDetectados: String?
+    @State private var huellaPDF: String?
+    @State private var archivoOrigen: String?
+    @State private var confirmandoDiscrepancia = false
+    @State private var confirmandoDuplicado = false
 
     // Movimientos en revisión
     struct MovRevision: Identifiable {
@@ -57,6 +63,8 @@ struct ImportarEstadoView: View {
 
     struct IndiceAsignacion: Identifiable { let id: Int }
     @State private var asignando: IndiceAsignacion?
+    struct IndiceEdicion: Identifiable { let id: Int }
+    @State private var editando: IndiceEdicion?
 
     var body: some View {
         NavigationStack {
@@ -90,8 +98,14 @@ struct ImportarEstadoView: View {
                         partes: $revisiones[indice.id].partes)
                 }
             }
+            .sheet(item: $editando) { indice in
+                if revisiones.indices.contains(indice.id) {
+                    EditarMovimientoImportadoView(
+                        movimiento: $revisiones[indice.id])
+                }
+            }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 
     // MARK: - Paso 1: elegir PDF
@@ -164,18 +178,54 @@ struct ImportarEstadoView: View {
                     .foregroundStyle(usoIA ? Tema.positivo : Tema.advertencia)
             }
 
+            Section("Documento detectado") {
+                LabeledContent("Banco") {
+                    Text(bancoDetectado ?? "No identificado")
+                        .foregroundStyle(hayDiscrepanciaBanco
+                                         ? Tema.urgente : Tema.textoSecundario)
+                }
+                LabeledContent("Tarjeta") {
+                    Text(ultimosDigitosDetectados.map { "•••• \($0)" }
+                         ?? "Sin terminación visible")
+                        .foregroundStyle(hayDiscrepanciaTarjeta
+                                         ? Tema.urgente : Tema.textoSecundario)
+                }
+                if let archivoOrigen {
+                    LabeledContent("Archivo") {
+                        Text(archivoOrigen)
+                            .foregroundStyle(Tema.textoSecundario)
+                            .lineLimit(1)
+                    }
+                }
+
+                if hayDiscrepanciaBanco || hayDiscrepanciaTarjeta {
+                    Label("El documento no parece corresponder con la tarjeta seleccionada.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.urgente)
+                    Toggle("Confirmo que elegí la tarjeta correcta",
+                           isOn: $confirmandoDiscrepancia)
+                }
+
+                if estadoPosiblementeDuplicado != nil {
+                    Label("Ya existe un estado de esta tarjeta con el mismo archivo o fecha de corte.",
+                          systemImage: "doc.on.doc.fill")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.advertencia)
+                    Toggle("Importar nuevamente de todos modos",
+                           isOn: $confirmandoDuplicado)
+                }
+            }
+
             Section {
                 DatePicker("Fecha de corte", selection: $fechaCorte,
                            displayedComponents: .date)
                 DatePicker("Fecha límite de pago", selection: $fechaLimite,
                            displayedComponents: .date)
-                TextField("Pago para no generar intereses",
-                          value: $pagoNoIntereses, format: .number)
-                    .keyboardType(.decimalPad)
-                TextField("Pago mínimo", value: $pagoMinimo, format: .number)
-                    .keyboardType(.decimalPad)
-                TextField("Saldo al corte", value: $saldoAlCorte, format: .number)
-                    .keyboardType(.decimalPad)
+                filaImporte("Pago para no generar intereses",
+                             valor: $pagoNoIntereses)
+                filaImporte("Pago mínimo", valor: $pagoMinimo)
+                filaImporte("Saldo al corte", valor: $saldoAlCorte)
             } header: {
                 Text("Datos del corte (revisa y corrige)")
             } footer: {
@@ -207,7 +257,27 @@ struct ImportarEstadoView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .foregroundStyle(Tema.positivo)
+                .disabled(!puedeImportar)
+                if !datosObligatoriosCompletos {
+                    Label("Completa los tres importes del corte antes de importar.",
+                          systemImage: "exclamationmark.circle")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.urgente)
+                }
             }
+        }
+    }
+
+    private func filaImporte(_ titulo: String,
+                             valor: Binding<Double?>) -> some View {
+        LabeledContent {
+            TextField("Sin detectar", value: valor,
+                      format: .currency(code: "MXN"))
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 150)
+        } label: {
+            Text(titulo)
         }
     }
 
@@ -217,7 +287,7 @@ struct ImportarEstadoView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(rev.wrappedValue.comercio)
                         .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
+                        .lineLimit(2)
                     Text("\(rev.wrappedValue.fecha.formatted(date: .abbreviated, time: .omitted)) · \(rev.wrappedValue.monto.comoDinero)")
                         .font(.caption)
                         .foregroundStyle(Tema.textoSecundario)
@@ -232,6 +302,18 @@ struct ImportarEstadoView: View {
             }
 
             if rev.wrappedValue.incluir {
+                Button {
+                    if let indice = revisiones.firstIndex(where: {
+                        $0.id == rev.wrappedValue.id
+                    }) {
+                        editando = IndiceEdicion(id: indice)
+                    }
+                } label: {
+                    Label("Editar datos detectados", systemImage: "pencil")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+
                 Picker("Categoría", selection: rev.categoria) {
                     Text("Sin categoría").tag(nil as Categoria?)
                     ForEach(categorias) { cat in
@@ -301,6 +383,50 @@ struct ImportarEstadoView: View {
         return "Compartida con \(nombres)"
     }
 
+    private var datosObligatoriosCompletos: Bool {
+        (pagoNoIntereses ?? -1) >= 0
+            && (pagoMinimo ?? -1) >= 0
+            && (saldoAlCorte ?? -1) >= 0
+            && fechaLimite >= fechaCorte
+    }
+
+    private var estadoPosiblementeDuplicado: EstadoDeCuenta? {
+        tarjeta.estadosDeCuenta.first { estado in
+            if let huellaPDF, let previa = estado.huellaPDF,
+               previa == huellaPDF { return true }
+            return Calendar.current.isDate(estado.fechaCorte,
+                                           inSameDayAs: fechaCorte)
+        }
+    }
+
+    private var hayDiscrepanciaBanco: Bool {
+        guard let detectado = bancoDetectado,
+              let seleccionado = tarjeta.banco?.nombre else { return false }
+        let a = normalizarComparacion(detectado)
+        let b = normalizarComparacion(seleccionado)
+        return !a.contains(b) && !b.contains(a)
+    }
+
+    private var hayDiscrepanciaTarjeta: Bool {
+        guard let detectados = ultimosDigitosDetectados,
+              !tarjeta.ultimosDigitos.isEmpty else { return false }
+        return detectados != tarjeta.ultimosDigitos.suffix(4)
+    }
+
+    private var puedeImportar: Bool {
+        datosObligatoriosCompletos
+            && (!(hayDiscrepanciaBanco || hayDiscrepanciaTarjeta)
+                || confirmandoDiscrepancia)
+            && (estadoPosiblementeDuplicado == nil || confirmandoDuplicado)
+    }
+
+    private func normalizarComparacion(_ texto: String) -> String {
+        texto.folding(options: [.diacriticInsensitive, .caseInsensitive],
+                      locale: Locale(identifier: "es_MX"))
+            .uppercased()
+            .filter { $0.isLetter || $0.isNumber }
+    }
+
     // MARK: - Procesar el PDF
 
     private func procesar(_ url: URL) {
@@ -308,7 +434,9 @@ struct ImportarEstadoView: View {
         mensajeError = nil
 
         Task {
-            let paginas = await ExtractorPDF.paginas(de: url)
+            async let lecturaPaginas = ExtractorPDF.paginas(de: url)
+            async let lecturaHuella = ExtractorPDF.huellaSHA256(de: url)
+            let (paginas, huella) = await (lecturaPaginas, lecturaHuella)
             guard !paginas.isEmpty else {
                 await MainActor.run {
                     mensajeError = "No pude leer ese PDF, ni como texto ni como imagen. Comprueba que el archivo abra correctamente y vuelve a intentarlo."
@@ -331,6 +459,8 @@ struct ImportarEstadoView: View {
             }
 
             await MainActor.run {
+                huellaPDF = huella
+                archivoOrigen = url.lastPathComponent
                 prepararRevision(con: datos)
                 paso = .revision
             }
@@ -339,6 +469,10 @@ struct ImportarEstadoView: View {
 
     private func prepararRevision(con datos: ResumenDetectado) {
         usoIA = datos.usoIA
+        bancoDetectado = datos.bancoDetectado
+        ultimosDigitosDetectados = datos.ultimosDigitosDetectados
+        confirmandoDiscrepancia = false
+        confirmandoDuplicado = false
         if let f = datos.fechaCorte { fechaCorte = f }
         if let f = datos.fechaLimitePago { fechaLimite = f }
         pagoNoIntereses = datos.pagoParaNoGenerarIntereses
@@ -494,6 +628,9 @@ struct ImportarEstadoView: View {
     // MARK: - Importar (todo entra como movimientos: Ley 1)
 
     private func importarTodo() {
+        guard puedeImportar else { return }
+        let loteID = UUID()
+
         // 1. El estado de cuenta (la "cuenta del restaurante")
         let calendario = Calendar.current
         let inicioPeriodo: Date
@@ -515,15 +652,19 @@ struct ImportarEstadoView: View {
             pagoMinimo: pagoMinimo ?? 0,
             saldoAlCorte: saldoAlCorte ?? 0,
             tarjeta: tarjeta)
+        estado.importacionID = loteID
+        estado.huellaPDF = huellaPDF
+        estado.archivoOrigen = archivoOrigen
+        estado.bancoDetectado = bancoDetectado
         contexto.insert(estado)
 
         // 2. Cada movimiento aprobado
-        for rev in revisiones where rev.incluir && !rev.esDuplicado {
+        for rev in revisiones where rev.incluir {
             if rev.esMSI {
                 if let plan = rev.planExistente {
-                    avanzarPlan(plan, con: estado)
+                    avanzarPlan(plan, con: estado, loteID: loteID)
                 } else {
-                    crearPlanImportado(rev, estado: estado)
+                    crearPlanImportado(rev, estado: estado, loteID: loteID)
                 }
             } else {
                 let mov = Movimiento(tipo: .compraCredito,
@@ -532,19 +673,31 @@ struct ImportarEstadoView: View {
                                      detalle: rev.comercio,
                                      tarjeta: tarjeta,
                                      categoria: rev.categoria)
+                mov.importacionID = loteID
                 contexto.insert(mov)
-                crearCompartidaSiAplica(para: mov, partes: rev.partes)
+                crearCompartidaSiAplica(para: mov, partes: rev.partes,
+                                        loteID: loteID)
             }
         }
-        cerrar()
+
+        do {
+            try contexto.save()
+            cerrar()
+        } catch {
+            contexto.rollback()
+            mensajeError = "No se pudo guardar la importación. No se modificó tu información."
+        }
     }
 
     /// Plan reconocido: la mensualidad avanza sola y a cada persona
     /// se le carga su parte del mes (con la división ya recordada).
-    private func avanzarPlan(_ plan: PlanMSI, con estado: EstadoDeCuenta) {
+    private func avanzarPlan(_ plan: PlanMSI,
+                             con estado: EstadoDeCuenta,
+                             loteID: UUID) {
         guard let mensualidad = plan.siguientePendienteDeGenerar else { return }
         mensualidad.fechaGeneracion = fechaCorte
         mensualidad.estadoDeCuenta = estado
+        mensualidad.importacionID = loteID
 
         // Replicar la división del mes anterior (memoria de dueños)
         if let compartida = plan.movimientos
@@ -556,16 +709,20 @@ struct ImportarEstadoView: View {
                 }
             }
             for (persona, monto) in plantilla {
-                contexto.insert(Participacion(monto: monto,
-                                              persona: persona,
-                                              compra: compartida))
+                let parte = Participacion(monto: monto,
+                                          persona: persona,
+                                          compra: compartida)
+                parte.importacionID = loteID
+                contexto.insert(parte)
             }
         }
     }
 
     /// Plan nuevo detectado: "4 de 13" a media vida, o una compra
     /// DIFERIDA "0 de N" que aún no empieza a cobrarse (Banamex).
-    private func crearPlanImportado(_ rev: MovRevision, estado: EstadoDeCuenta) {
+    private func crearPlanImportado(_ rev: MovRevision,
+                                    estado: EstadoDeCuenta,
+                                    loteID: UUID) {
         let calendario = Calendar.current
 
         // Fecha de compra: para diferidos usamos la fecha real de la
@@ -592,12 +749,14 @@ struct ImportarEstadoView: View {
                            numeroMeses: rev.msiTotal,
                            fechaCompra: fechaCompra,
                            tarjeta: tarjeta)
+        plan.importacionID = loteID
         contexto.insert(plan)
 
         for numero in 1...rev.msiTotal {
             let mensualidad = MensualidadMSI(numero: numero,
                                              monto: montoMensualidad,
                                              plan: plan)
+            mensualidad.importacionID = loteID
             contexto.insert(mensualidad)
 
             if numero < rev.msiNumero {
@@ -630,13 +789,16 @@ struct ImportarEstadoView: View {
             tarjeta: tarjeta,
             categoria: rev.categoria)
         mov.planMSI = plan
+        mov.importacionID = loteID
         contexto.insert(mov)
 
-        crearCompartidaSiAplica(para: mov, partes: rev.partes)
+        crearCompartidaSiAplica(para: mov, partes: rev.partes,
+                                loteID: loteID)
     }
 
     private func crearCompartidaSiAplica(para movimiento: Movimiento,
-                                         partes: [PersistentIdentifier: Double]) {
+                                         partes: [PersistentIdentifier: Double],
+                                         loteID: UUID) {
         let conMonto = partes.filter { $0.value > 0 }
         guard !conMonto.isEmpty else { return }
 
@@ -646,11 +808,92 @@ struct ImportarEstadoView: View {
 
         for persona in personas {
             if let monto = conMonto[persona.id], monto > 0 {
-                contexto.insert(Participacion(monto: monto,
-                                              persona: persona,
-                                              compra: compartida))
+                let parte = Participacion(monto: monto,
+                                          persona: persona,
+                                          compra: compartida)
+                parte.importacionID = loteID
+                contexto.insert(parte)
             }
         }
+    }
+}
+
+// MARK: - Corrección de un movimiento antes de importarlo
+
+struct EditarMovimientoImportadoView: View {
+    @Binding var movimiento: ImportarEstadoView.MovRevision
+    @Environment(\.dismiss) private var cerrar
+
+    @State private var comercio: String
+    @State private var monto: Double?
+    @State private var fecha: Date
+    @State private var esMSI: Bool
+    @State private var numero: Int
+    @State private var total: Int
+
+    init(movimiento: Binding<ImportarEstadoView.MovRevision>) {
+        _movimiento = movimiento
+        let valor = movimiento.wrappedValue
+        _comercio = State(initialValue: valor.comercio)
+        _monto = State(initialValue: valor.monto)
+        _fecha = State(initialValue: valor.fecha)
+        _esMSI = State(initialValue: valor.esMSI)
+        _numero = State(initialValue: valor.msiNumero)
+        _total = State(initialValue: valor.msiTotal)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Datos detectados") {
+                    TextField("Comercio o descripción", text: $comercio,
+                              axis: .vertical)
+                        .lineLimit(2...4)
+                    LabeledContent("Monto") {
+                        TextField("$0.00", value: $monto,
+                                  format: .currency(code: "MXN"))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    DatePicker("Fecha", selection: $fecha,
+                               displayedComponents: .date)
+                }
+
+                Section("Compra a meses") {
+                    Toggle("Es una mensualidad", isOn: $esMSI)
+                    if esMSI {
+                        Stepper("Mensualidad actual: \(numero)",
+                                value: $numero, in: 0...max(1, total))
+                        Stepper("Total de mensualidades: \(total)",
+                                value: $total, in: max(1, numero)...60)
+                    }
+                }
+            }
+            .navigationTitle("Corregir movimiento")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { cerrar() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") {
+                        movimiento.comercio = comercio
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        movimiento.monto = (monto ?? 0).redondeadoAMoneda
+                        movimiento.fecha = fecha
+                        movimiento.esMSI = esMSI
+                        movimiento.msiNumero = esMSI ? numero : 0
+                        movimiento.msiTotal = esMSI ? total : 0
+                        cerrar()
+                    }
+                    .disabled(comercio.trimmingCharacters(
+                        in: .whitespacesAndNewlines).isEmpty
+                        || (monto ?? 0) < 0
+                        || (esMSI && total < 1))
+                }
+            }
+        }
+        .aparienciaDeLaApp()
     }
 }
 

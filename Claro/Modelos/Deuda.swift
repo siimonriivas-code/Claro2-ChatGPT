@@ -23,7 +23,7 @@ final class Deuda {
 
     init(acreedor: String, montoOriginal: Double, fecha: Date = .now, notas: String = "") {
         self.acreedor = acreedor
-        self.montoOriginal = montoOriginal
+        self.montoOriginal = montoOriginal.redondeadoAMoneda
         self.fecha = fecha
         self.notas = notas
     }

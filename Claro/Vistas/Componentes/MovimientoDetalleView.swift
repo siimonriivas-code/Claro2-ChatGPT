@@ -273,7 +273,7 @@ struct MovimientoDetalleView: View {
             registrar(campo: "Monto",
                       anterior: movimiento.monto.comoDinero,
                       nuevo: nuevoMonto.comoDinero)
-            movimiento.monto = nuevoMonto
+            movimiento.monto = nuevoMonto.redondeadoAMoneda
         }
         if fechaEditada != movimiento.fecha {
             registrar(campo: "Fecha",

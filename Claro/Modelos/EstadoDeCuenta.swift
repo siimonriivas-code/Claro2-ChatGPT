@@ -22,6 +22,13 @@ final class EstadoDeCuenta {
     var pagoMinimo: Double
     var saldoAlCorte: Double       // lo que el banco reportó al corte
 
+    // Metadatos locales de la importación. No se conserva el PDF: solo su
+    // huella para detectar duplicados y el nombre para el historial.
+    var importacionID: UUID? = nil
+    var huellaPDF: String? = nil
+    var archivoOrigen: String? = nil
+    var bancoDetectado: String? = nil
+
     var tarjeta: TarjetaCredito?
 
     // Mensualidades MSI que el banco incluyó en este corte.
@@ -42,9 +49,9 @@ final class EstadoDeCuenta {
         self.fechaLimitePago = fechaLimitePago
         self.inicioPeriodo = inicioPeriodo
         self.finPeriodo = finPeriodo
-        self.pagoParaNoGenerarIntereses = pagoParaNoGenerarIntereses
-        self.pagoMinimo = pagoMinimo
-        self.saldoAlCorte = saldoAlCorte
+        self.pagoParaNoGenerarIntereses = pagoParaNoGenerarIntereses.redondeadoAMoneda
+        self.pagoMinimo = pagoMinimo.redondeadoAMoneda
+        self.saldoAlCorte = saldoAlCorte.redondeadoAMoneda
         self.tarjeta = tarjeta
     }
 }
