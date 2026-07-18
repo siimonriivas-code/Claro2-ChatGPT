@@ -63,13 +63,49 @@ enum ModeloQwen: String, CaseIterable, Identifiable {
         }
     }
 
-    /// El 8B reserva menos conversación simultánea para cuidar la memoria
-    /// del iPhone sin reducir la calidad de razonamiento del modelo.
-    var maximoKV: Int {
+    /// El 8B usa caché creciente y cuantizada en lugar de recortar la
+    /// conversación. El propio contexto nativo del modelo marca el techo.
+    var maximoKV: Int? {
         switch self {
         case .estable4B: return 8_192
-        case .potente8B: return 4_096
+        case .potente8B: return nil
         }
+    }
+
+    func maximoTokens(requiereRazonamiento: Bool) -> Int {
+        switch self {
+        case .estable4B:
+            return requiereRazonamiento ? 1_200 : 750
+        case .potente8B:
+            return requiereRazonamiento ? 8_192 : 4_096
+        }
+    }
+
+    var descripcionCapacidad: String {
+        switch self {
+        case .estable4B:
+            return "Perfil estable para respuestas rápidas"
+        case .potente8B:
+            return "Perfil máximo · hasta 8,192 tokens al razonar"
+        }
+    }
+}
+
+struct MetricasQwen: Equatable {
+    let segundos: Double
+    let tokensGenerados: Int
+    let temperatura: String
+
+    var tokensPorSegundo: Double {
+        guard segundos > 0 else { return 0 }
+        return Double(tokensGenerados) / segundos
+    }
+
+    var descripcion: String {
+        let tiempo = segundos.formatted(.number.precision(.fractionLength(1)))
+        let velocidad = tokensPorSegundo.formatted(
+            .number.precision(.fractionLength(1)))
+        return "Última respuesta: \(tiempo) s · \(tokensGenerados) tokens · \(velocidad) tokens/s · \(temperatura)"
     }
 }
 
@@ -79,6 +115,7 @@ final class AdministradorQwen: ObservableObject {
 
     @Published private(set) var estado: EstadoModeloQwen = .noDescargado
     @Published private(set) var modeloSeleccionado: ModeloQwen
+    @Published private(set) var metricasUltimaRespuesta: MetricasQwen?
 
     private var contenedor: ModelContainer?
     private var operacionEnCurso = false
@@ -129,6 +166,7 @@ final class AdministradorQwen: ObservableObject {
         }
 
         contenedor = nil
+        metricasUltimaRespuesta = nil
         modeloSeleccionado = modelo
         UserDefaults.standard.set(modelo.rawValue,
                                   forKey: Self.claveModeloSeleccionado)
@@ -196,7 +234,8 @@ final class AdministradorQwen: ObservableObject {
         guard let contenedor else { throw ErrorQwen.modeloNoDisponible }
 
         let parametros = GenerateParameters(
-            maxTokens: requiereRazonamiento ? 1_200 : 750,
+            maxTokens: modeloSeleccionado.maximoTokens(
+                requiereRazonamiento: requiereRazonamiento),
             maxKVSize: modeloSeleccionado.maximoKV,
             kvBits: 8,
             temperature: requiereRazonamiento ? 0.45 : 0.30,
@@ -210,7 +249,15 @@ final class AdministradorQwen: ObservableObject {
             instructions: ClaroInteligenciaLocal.instruccionesDelCopiloto,
             generateParameters: parametros)
         let modo = requiereRazonamiento ? "/think" : "/no_think"
+        let inicio = Date()
         let texto = try await sesion.respond(to: "\(solicitud)\n\n\(modo)")
+        let segundos = max(0.001, Date().timeIntervalSince(inicio))
+        let tokenizador = await contenedor.tokenizer
+        let cantidadTokens = tokenizador.encode(text: texto).count
+        metricasUltimaRespuesta = MetricasQwen(
+            segundos: segundos,
+            tokensGenerados: cantidadTokens,
+            temperatura: Self.descripcionTermica(ProcessInfo.processInfo.thermalState))
         let limpio = Self.limpiarRazonamientoInterno(texto)
         guard !limpio.isEmpty else { throw ErrorQwen.respuestaVacia }
         return limpio
@@ -234,6 +281,7 @@ final class AdministradorQwen: ObservableObject {
         if FileManager.default.fileExists(atPath: objetivo.path) {
             try FileManager.default.removeItem(at: objetivo)
         }
+        metricasUltimaRespuesta = nil
         estado = .noDescargado
     }
 
@@ -293,6 +341,17 @@ final class AdministradorQwen: ObservableObject {
             return "No pude descargar Qwen. Revisa tu conexión e inténtalo de nuevo."
         }
         return "No pude preparar Qwen. Apple Intelligence seguirá disponible."
+    }
+
+    private static func descripcionTermica(
+        _ estado: ProcessInfo.ThermalState) -> String {
+        switch estado {
+        case .nominal: return "temperatura normal"
+        case .fair: return "temperatura moderada"
+        case .serious: return "temperatura alta"
+        case .critical: return "temperatura crítica"
+        @unknown default: return "temperatura desconocida"
+        }
     }
 }
 

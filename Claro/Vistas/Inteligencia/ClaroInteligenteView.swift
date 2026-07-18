@@ -167,6 +167,19 @@ struct ClaroInteligenteView: View {
                     .tint(Tema.acento)
             }
 
+            Text(qwen.modeloSeleccionado.descripcionCapacidad)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(qwen.modeloSeleccionado == .potente8B
+                                 ? Tema.positivo : Tema.textoSecundario)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let metricas = qwen.metricasUltimaRespuesta {
+                Text(metricas.descripcion)
+                    .font(.caption2)
+                    .foregroundStyle(Tema.textoSecundario)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Text("Qwen solo responde en este chat; nunca identifica ni importa estados de cuenta.")
                 .font(.caption2)
                 .foregroundStyle(Tema.textoSecundario)

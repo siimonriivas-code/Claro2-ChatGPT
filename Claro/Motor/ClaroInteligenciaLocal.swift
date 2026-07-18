@@ -113,7 +113,10 @@ enum ClaroInteligenciaLocal {
         resumen: ResumenFinancieroClaro,
         veredictoDelMotor: String,
         historial: [TurnoConversacionClaro]) -> String {
-        let conversacion = historial.suffix(6).map {
+        let qwen = AdministradorQwen.shared
+        let limiteHistorial = qwen.modeloSeleccionado == .potente8B
+            && qwen.estaDescargado ? 18 : 6
+        let conversacion = historial.suffix(limiteHistorial).map {
             "\($0.esUsuario ? "USUARIO" : "CLARO"): \($0.texto)"
         }.joined(separator: "\n")
         return """
