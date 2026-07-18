@@ -196,6 +196,8 @@ struct CuentasView: View {
                 Text(resumenBanco(banco))
                     .font(.caption2)
                     .foregroundStyle(Tema.textoSecundario)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.70)
                 Menu {
                     Button {
                         bancoEditando = banco
@@ -256,12 +258,16 @@ struct CuentasView: View {
         }
     }
 
-    /// "1 cuenta · 3 tarjetas", omitiendo lo que esté en cero.
+    /// "$12,500 · 1 cuenta · 3 tarjetas", omitiendo lo que esté en cero.
     private func resumenBanco(_ banco: Banco) -> String {
         var partes: [String] = []
         let c = banco.cuentas.count
         let t = banco.tarjetas.count
-        if c > 0 { partes.append(c == 1 ? "1 cuenta" : "\(c) cuentas") }
+        if c > 0 {
+            let saldo = banco.cuentas.reduce(0) { $0 + $1.saldoCalculado }
+            partes.append(saldo.comoDinero)
+            partes.append(c == 1 ? "1 cuenta" : "\(c) cuentas")
+        }
         if t > 0 { partes.append(t == 1 ? "1 tarjeta" : "\(t) tarjetas") }
         return partes.isEmpty ? "sin cuentas" : partes.joined(separator: " · ")
     }

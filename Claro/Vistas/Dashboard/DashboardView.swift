@@ -27,6 +27,9 @@ struct DashboardView: View {
     private var disponible: Double {
         MotorDashboard.disponibleReal(cuentas: cuentas, tarjetas: tarjetas)
     }
+    private var dineroEnCuentas: Double {
+        MotorDashboard.saldoTotal(cuentas: cuentas)
+    }
     private var comprometido: Double {
         MotorDashboard.comprometido(tarjetas: tarjetas)
     }
@@ -176,13 +179,25 @@ struct DashboardView: View {
     private var panelDisponible: some View {
         Panel {
             VStack(alignment: .leading, spacing: 6) {
-                Text("DISPONIBLE REAL")
+                Text("DINERO TOTAL EN TUS CUENTAS")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Tema.textoSecundario)
-                Text(disponible.comoDinero)
+                Text(dineroEnCuentas.comoDinero)
                     .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .foregroundStyle(disponible >= 0 ? Tema.positivo : Tema.urgente)
-                Text("Dinero en cuentas menos lo comprometido en pagos de tarjetas")
+                    .foregroundStyle(dineroEnCuentas >= 0 ? Tema.positivo : Tema.urgente)
+
+                Divider().overlay(Tema.panelElevado)
+
+                HStack {
+                    Text("Disponible real después de tarjetas")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.textoSecundario)
+                    Spacer()
+                    Text(disponible.comoDinero)
+                        .font(.system(.body, design: .rounded).weight(.bold))
+                        .foregroundStyle(disponible >= 0 ? Tema.positivo : Tema.urgente)
+                }
+                Text("Suma todas tus cuentas y después descuenta lo comprometido en tarjetas.")
                     .font(.footnote)
                     .foregroundStyle(Tema.textoSecundario)
             }

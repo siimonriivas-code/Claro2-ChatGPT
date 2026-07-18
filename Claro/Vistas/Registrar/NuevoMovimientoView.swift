@@ -65,7 +65,7 @@ struct NuevoMovimientoView: View {
                            selection: $cuentaSeleccionada) {
                         Text("Selecciona…").tag(nil as CuentaBancaria?)
                         ForEach(cuentas) { cuenta in
-                            Text("\(cuenta.banco?.nombre ?? "") · \(cuenta.nombre)")
+                            Text("\(cuenta.banco?.nombre ?? "") · \(cuenta.nombre) · \(cuenta.saldoCalculado.comoDinero)")
                                 .tag(cuenta as CuentaBancaria?)
                         }
                     }
@@ -84,6 +84,12 @@ struct NuevoMovimientoView: View {
                     TextField(esIngreso ? "Descripción (ej. Pensión junio)"
                                         : "Descripción (ej. Recibo de luz CFE)",
                               text: $detalle)
+
+                    if esIngreso {
+                        Text("Una misma cuenta puede recibir varios ingresos. Usa la descripción para distinguir pensión, nómina u otra fuente.")
+                            .font(.footnote)
+                            .foregroundStyle(Tema.textoSecundario)
+                    }
                 }
 
                 // ── Gasto compartido (solo para gastos) ──
@@ -136,6 +142,14 @@ struct NuevoMovimientoView: View {
             }
         }
         .aparienciaDeLaApp()
+        .onAppear { seleccionarCuentaUnica() }
+        .onChange(of: cuentas.count) { _, _ in seleccionarCuentaUnica() }
+    }
+
+    private func seleccionarCuentaUnica() {
+        if cuentaSeleccionada == nil, cuentas.count == 1 {
+            cuentaSeleccionada = cuentas[0]
+        }
     }
 
     private func guardar() {

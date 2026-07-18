@@ -17,6 +17,7 @@ struct CuentaDetalleView: View {
     @Environment(\.dismiss) private var cerrar
 
     @State private var mostrandoEdicion = false
+    @State private var mostrandoFusion = false
     @State private var confirmandoEliminacion = false
 
     private var movimientosOrdenados: [Movimiento] {
@@ -79,6 +80,12 @@ struct CuentaDetalleView: View {
                     } label: {
                         Label("Editar cuenta", systemImage: "pencil")
                     }
+                    Button {
+                        mostrandoFusion = true
+                    } label: {
+                        Label("Fusionar con otra cuenta",
+                              systemImage: "arrow.triangle.merge")
+                    }
                     Divider()
                     Button(role: .destructive) {
                         confirmandoEliminacion = true
@@ -93,6 +100,11 @@ struct CuentaDetalleView: View {
         }
         .sheet(isPresented: $mostrandoEdicion) {
             EditarCuentaView(cuenta: cuenta)
+        }
+        .sheet(isPresented: $mostrandoFusion) {
+            FusionarCuentaView(cuentaOrigen: cuenta) {
+                cerrar()
+            }
         }
         .confirmationDialog("¿Eliminar esta cuenta?",
                             isPresented: $confirmandoEliminacion,

@@ -87,7 +87,7 @@ struct PagoTarjetaView: View {
                     Picker("Cuenta de donde sale", selection: $cuentaOrigen) {
                         Text("Selecciona…").tag(nil as CuentaBancaria?)
                         ForEach(cuentas) { c in
-                            Text("\(c.banco?.nombre ?? "") · \(c.nombre)")
+                            Text("\(c.banco?.nombre ?? "") · \(c.nombre) · \(c.saldoCalculado.comoDinero)")
                                 .tag(c as CuentaBancaria?)
                         }
                     }
@@ -99,7 +99,7 @@ struct PagoTarjetaView: View {
                 } header: {
                     Text("Detalles")
                 } footer: {
-                    Text("🪞 Espejo estricto: todo pago sale de una de tus cuentas y solo si tiene fondos. Si pagaste con dinero que no está en la app, registra primero ese ingreso y después el pago.")
+                    Text("🪞 Todo pago sale de la cuenta real donde está el dinero. Si solo tienes una, Claro la selecciona automáticamente.")
                 }
 
                 // Espejo estricto: sin fondos no hay pago
@@ -136,6 +136,14 @@ struct PagoTarjetaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
+        .onAppear { seleccionarCuentaUnica() }
+        .onChange(of: cuentas.count) { _, _ in seleccionarCuentaUnica() }
+    }
+
+    private func seleccionarCuentaUnica() {
+        if cuentaOrigen == nil, cuentas.count == 1 {
+            cuentaOrigen = cuentas[0]
+        }
     }
 }
