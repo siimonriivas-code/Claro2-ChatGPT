@@ -12,6 +12,8 @@ import SwiftUI
 import SwiftData
 
 struct DashboardView: View {
+    @Environment(\.colorScheme) private var esquemaActual
+
     @Query private var cuentas: [CuentaBancaria]
     @Query private var tarjetas: [TarjetaCredito]
     @Query private var personas: [Persona]
@@ -19,6 +21,7 @@ struct DashboardView: View {
     @Query private var deudas: [Deuda]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
+    @AppStorage("apariencia") private var apariencia = Apariencia.oscuro.rawValue
 
     private var disponible: Double {
         MotorDashboard.disponibleReal(cuentas: cuentas, tarjetas: tarjetas)
@@ -90,7 +93,18 @@ struct DashboardView: View {
             .background(Tema.fondo.ignoresSafeArea())
             .navigationTitle("Inicio")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        alternarApariencia()
+                    } label: {
+                        Image(systemName: esquemaActual == .dark
+                              ? "sun.max.fill" : "moon.fill")
+                            .foregroundStyle(Tema.textoSecundario)
+                    }
+                    .accessibilityLabel(esquemaActual == .dark
+                                        ? "Activar modo claro"
+                                        : "Activar modo oscuro")
+
                     Button {
                         montosOcultos.toggle()
                     } label: {
@@ -100,6 +114,14 @@ struct DashboardView: View {
                 }
             }
         }
+    }
+
+    /// Acceso rápido desde Inicio. Si la app seguía al sistema, toma el
+    /// aspecto que se ve en ese momento y cambia al contrario.
+    private func alternarApariencia() {
+        apariencia = esquemaActual == .dark
+            ? Apariencia.claro.rawValue
+            : Apariencia.oscuro.rawValue
     }
 
     private var panelDisponible: some View {
