@@ -308,16 +308,27 @@ struct ImportarEstadoView: View {
         mensajeError = nil
 
         Task {
-            let paginas = ExtractorPDF.paginas(de: url)
+            let paginas = await ExtractorPDF.paginas(de: url)
             guard !paginas.isEmpty else {
                 await MainActor.run {
-                    mensajeError = "No pude leer texto de ese PDF. Si es un documento escaneado (imagen), por ahora captura el corte manualmente."
+                    mensajeError = "No pude leer ese PDF, ni como texto ni como imagen. Comprueba que el archivo abra correctamente y vuelve a intentarlo."
                     paso = .inicio
                 }
                 return
             }
 
             let datos = await AnalizadorEstadoDeCuenta.analizar(paginas: paginas)
+            let tieneDatosFinancieros = datos.pagoParaNoGenerarIntereses != nil
+                || datos.pagoMinimo != nil
+                || datos.saldoAlCorte != nil
+                || !datos.movimientos.isEmpty
+            guard tieneDatosFinancieros else {
+                await MainActor.run {
+                    mensajeError = "Pude abrir el PDF, pero no encontré importes o movimientos confiables. No se guardó ningún dato."
+                    paso = .inicio
+                }
+                return
+            }
 
             await MainActor.run {
                 prepararRevision(con: datos)

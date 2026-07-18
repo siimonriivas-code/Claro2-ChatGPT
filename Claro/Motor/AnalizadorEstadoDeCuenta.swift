@@ -45,17 +45,58 @@ enum AnalizadorEstadoDeCuenta {
     static func analizar(paginas: [String]) async -> ResumenDetectado {
         // Interruptor en Configuración: el usuario decide si usar la IA
         let usarIA = UserDefaults.standard.object(forKey: "importarConIA") as? Bool ?? true
+        let conReglas = analizarConReglas(paginas: paginas)
+
+        // Estos formatos ya tienen un camino determinista comprobable. En
+        // particular, se evita que una respuesta vacía o imprecisa de la IA
+        // sustituya la lectura por reglas de Hey Banco o Liverpool.
+        if esFormatoDeterminista(paginas) {
+            return conReglas
+        }
 
         #if canImport(FoundationModels)
         if usarIA, #available(iOS 26.0, *) {
             if case .available = SystemLanguageModel.default.availability {
-                if let conIA = try? await analizarConIA(paginas: paginas) {
-                    return conIA
+                if let conIA = try? await analizarConIA(paginas: paginas),
+                   esResultadoUtil(conIA) {
+                    return completar(conIA, con: conReglas)
                 }
             }
         }
         #endif
-        return analizarConReglas(paginas: paginas)
+        return conReglas
+    }
+
+    private static func esFormatoDeterminista(_ paginas: [String]) -> Bool {
+        let texto = normalizarParaBusqueda(paginas.joined(separator: "\n"))
+        return texto.contains("HEY BANCO") || texto.contains("HEYBANCO")
+            || texto.contains("LIVERPOOL")
+    }
+
+    private static func esResultadoUtil(_ resultado: ResumenDetectado) -> Bool {
+        resultado.fechaCorte != nil
+            || resultado.fechaLimitePago != nil
+            || resultado.pagoParaNoGenerarIntereses != nil
+            || resultado.pagoMinimo != nil
+            || resultado.saldoAlCorte != nil
+            || !resultado.movimientos.isEmpty
+    }
+
+    /// La IA puede acertar en los movimientos y omitir parte del resumen.
+    /// Las reglas completan exclusivamente los campos ausentes.
+    private static func completar(_ resultadoIA: ResumenDetectado,
+                                  con reglas: ResumenDetectado) -> ResumenDetectado {
+        var resultado = resultadoIA
+        resultado.fechaCorte = resultado.fechaCorte ?? reglas.fechaCorte
+        resultado.fechaLimitePago = resultado.fechaLimitePago ?? reglas.fechaLimitePago
+        resultado.pagoParaNoGenerarIntereses = resultado.pagoParaNoGenerarIntereses
+            ?? reglas.pagoParaNoGenerarIntereses
+        resultado.pagoMinimo = resultado.pagoMinimo ?? reglas.pagoMinimo
+        resultado.saldoAlCorte = resultado.saldoAlCorte ?? reglas.saldoAlCorte
+        if resultado.movimientos.isEmpty {
+            resultado.movimientos = reglas.movimientos
+        }
+        return resultado
     }
 
     // ─────────────────────────────────────────────
@@ -276,9 +317,12 @@ enum AnalizadorEstadoDeCuenta {
             var descripcion = reg.descripcion
             let mayus = descripcion.uppercased()
             let esPago = ["PAGO TDC", "SU PAGO", "BMOVIL.PAGO",
-                          "PAGO POR SPEI", "PAGO RECIBIDO", "TIPO DE CAMBIO"]
+                          "PAGO POR SPEI", "PAGO RECIBIDO", "GRACIAS POR SU PAGO",
+                          "ABONO RECIBIDO", "TIPO DE CAMBIO"]
                 .contains { mayus.contains($0) }
-            guard !esPago else { continue }
+            let esCargoBancario = ["INTERESES", "IVA DE INTER", "COMISION", "COMISIÓN"]
+                .contains { mayus.contains($0) }
+            guard !esPago && !esCargoBancario else { continue }
 
             // ¿Trae contador "14 DE 20" al inicio? → es mensualidad
             var esMSI = false
@@ -393,7 +437,7 @@ enum AnalizadorEstadoDeCuenta {
     private static func analizarFilaRegular(_ cuerpo: String)
         -> (descripcion: String, esNegativo: Bool, monto: Double)? {
         guard let regex = try? NSRegularExpression(pattern:
-            "^(.{3,90}?)\\s*([+\\-])?\\s*\\$?\\s*([\\d,]+\\.\\d{2})\\s*$"),
+            "^(.{3,180}?)\\s*([+\\-])?\\s*\\$?\\s*([\\d,]+\\.\\d{2})\\s*([+\\-])?\\s*$"),
               let m = regex.firstMatch(in: cuerpo,
                                        range: NSRange(cuerpo.startIndex..., in: cuerpo))
         else { return nil }
@@ -407,7 +451,7 @@ enum AnalizadorEstadoDeCuenta {
         let monto = Double(grupo(3).replacingOccurrences(of: ",", with: "")) ?? 0
         guard monto > 0 else { return nil }
         return (grupo(1).trimmingCharacters(in: .whitespaces),
-                grupo(2) == "-", monto)
+                grupo(2) == "-" || grupo(4) == "-", monto)
     }
 
     private static func extraerMontos(de texto: String) -> [Double] {
@@ -505,18 +549,22 @@ enum AnalizadorEstadoDeCuenta {
     }
 
     private static func fechaCercaDe(_ claves: [String], en texto: String) -> Date? {
-        for linea in texto.components(separatedBy: .newlines) {
-            let mayus = linea.uppercased()
-            guard claves.contains(where: { mayus.contains($0) }) else { continue }
-            if let regex = try? NSRegularExpression(
-                pattern: #"(\d{1,2})[\/\-\s]([A-ZÁÉa-záé]{3,4}|\d{1,2})[\/\-\s](\d{2,4})"#),
-               let m = regex.firstMatch(in: linea,
-                                        range: NSRange(linea.startIndex..., in: linea)) {
-                func g(_ n: Int) -> String {
-                    guard let r = Range(m.range(at: n), in: linea) else { return "" }
-                    return String(linea[r])
+        let lineas = texto.components(separatedBy: .newlines)
+        let clavesNormalizadas = claves.map { normalizarParaBusqueda($0) }
+        for indice in lineas.indices {
+            let lineaNormalizada = normalizarParaBusqueda(lineas[indice])
+            guard clavesNormalizadas.contains(where: { lineaNormalizada.contains($0) })
+            else { continue }
+
+            // OCR conserva etiqueta y valor en la misma fila. PDFKit a
+            // veces manda el valor a alguno de los renglones siguientes.
+            let limite = min(lineas.count - 1, indice + 4)
+            for candidato in indice...limite {
+                if candidato > indice,
+                   esEtiquetaDeResumen(normalizarParaBusqueda(lineas[candidato])) {
+                    break
                 }
-                if let f = fechaDeLinea(dia: g(1), mes: g(2), anio: g(3)) { return f }
+                if let fecha = extraerFecha(de: lineas[candidato]) { return fecha }
             }
         }
         return nil
@@ -525,18 +573,96 @@ enum AnalizadorEstadoDeCuenta {
     private static func montoCercaDe(_ claves: [String],
                                      excluyendo: [String],
                                      en texto: String) -> Double? {
-        for linea in texto.components(separatedBy: .newlines) {
-            let mayus = linea.uppercased()
-            guard claves.contains(where: { mayus.contains($0) }) else { continue }
-            if excluyendo.contains(where: { mayus.contains($0) }) { continue }
-            if let regex = try? NSRegularExpression(pattern: "([\\d,]+\\.\\d{2})"),
-               let m = regex.firstMatch(in: linea,
-                                        range: NSRange(linea.startIndex..., in: linea)),
-               let r = Range(m.range(at: 1), in: linea) {
-                let limpio = linea[r].replacingOccurrences(of: ",", with: "")
-                if let monto = Double(limpio), monto > 0 { return monto }
+        let lineas = texto.components(separatedBy: .newlines)
+        let clavesNormalizadas = claves.map { normalizarParaBusqueda($0) }
+        let exclusionesNormalizadas = excluyendo.map { normalizarParaBusqueda($0) }
+        for indice in lineas.indices {
+            let lineaNormalizada = normalizarParaBusqueda(lineas[indice])
+            guard clavesNormalizadas.contains(where: { lineaNormalizada.contains($0) })
+            else { continue }
+            if exclusionesNormalizadas.contains(where: { lineaNormalizada.contains($0) }) {
+                continue
+            }
+
+            let limite = min(lineas.count - 1, indice + 3)
+            for candidato in indice...limite {
+                if candidato > indice,
+                   esEtiquetaDeResumen(normalizarParaBusqueda(lineas[candidato])) {
+                    break
+                }
+                if let monto = primerMonto(en: lineas[candidato]), monto > 0 {
+                    return monto
+                }
             }
         }
         return nil
+    }
+
+    private static func extraerFecha(de texto: String) -> Date? {
+        let patrones = [
+            #"(\d{4})-(\d{1,2})-(\d{1,2})"#,
+            #"(\d{1,2})[\/\-\s]([A-ZÁÉa-záé]{3,4}|\d{1,2})[\/\-\s](\d{2,4})"#
+        ]
+
+        for (indice, patron) in patrones.enumerated() {
+            guard let regex = try? NSRegularExpression(pattern: patron),
+                  let coincidencia = regex.firstMatch(
+                    in: texto, range: NSRange(texto.startIndex..., in: texto))
+            else { continue }
+
+            func grupo(_ numero: Int) -> String {
+                guard let rango = Range(coincidencia.range(at: numero), in: texto)
+                else { return "" }
+                return String(texto[rango])
+            }
+
+            if indice == 0 {
+                var componentes = DateComponents()
+                componentes.year = Int(grupo(1))
+                componentes.month = Int(grupo(2))
+                componentes.day = Int(grupo(3))
+                if let fecha = Calendar.current.date(from: componentes) { return fecha }
+            } else if let fecha = fechaDeLinea(dia: grupo(1),
+                                               mes: grupo(2),
+                                               anio: grupo(3)) {
+                return fecha
+            }
+        }
+        return nil
+    }
+
+    private static func primerMonto(en texto: String) -> Double? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"(?:\$\s*)?([0-9][0-9,\s]*[\.,][0-9]{2})"#),
+              let coincidencia = regex.firstMatch(
+                in: texto, range: NSRange(texto.startIndex..., in: texto)),
+              let rango = Range(coincidencia.range(at: 1), in: texto)
+        else { return nil }
+
+        var numero = String(texto[rango])
+            .replacingOccurrences(of: " ", with: "")
+        if numero.contains(".") && numero.contains(",") {
+            numero = numero.replacingOccurrences(of: ",", with: "")
+        } else if numero.contains(","),
+                  numero.split(separator: ",").last?.count == 2 {
+            numero = numero.replacingOccurrences(of: ",", with: ".")
+        } else {
+            numero = numero.replacingOccurrences(of: ",", with: "")
+        }
+        return Double(numero)
+    }
+
+    private static func normalizarParaBusqueda(_ texto: String) -> String {
+        texto.folding(options: [.diacriticInsensitive, .caseInsensitive],
+                      locale: Locale(identifier: "es_MX"))
+            .uppercased()
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
+    }
+
+    private static func esEtiquetaDeResumen(_ textoNormalizado: String) -> Bool {
+        ["FECHA DE CORTE", "FECHA LIMITE", "LIMITE DE PAGO", "PAGAR ANTES",
+         "NO GENERAR INTERESES", "PAGO MINIMO", "SALDO DEUDOR TOTAL",
+         "SALDO ACTUAL", "SALDO AL CORTE", "SALDO TOTAL"]
+            .contains { textoNormalizado.contains($0) }
     }
 }
