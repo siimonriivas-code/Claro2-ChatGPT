@@ -284,24 +284,52 @@ enum AnalizadorEstadoDeCuenta {
         resultado.ultimosDigitosDetectados = detectarUltimosDigitos(en: textoCompleto)
 
         // ── Datos generales del corte ──
-        resultado.fechaCorte = fechaCercaDe(["FECHA DE CORTE"], en: textoDeResumen)
-        resultado.fechaLimitePago = fechaCercaDe(
-            ["FECHA LIMITE", "FECHA LÍMITE", "LIMITE DE PAGO", "LÍMITE DE PAGO", "PAGAR ANTES"],
-            en: textoDeResumen)
+        // PDFKit entrega el encabezado de Hey por columnas: después de
+        // "Fecha de corte" aparece primero el inicio del periodo, y la fecha
+        // límite queda varios renglones más abajo. Se leen los dos campos con
+        // la estructura real del documento, no por mera cercanía.
+        if esHeyBanco {
+            resultado.fechaCorte = fechaFinalDelPeriodoHey(en: textoDeResumen)
+                ?? fechaCercaDe(["FECHA DE CORTE"], en: textoDeResumen)
+            resultado.fechaLimitePago = fechaDespuesDeClave(
+                ["FECHA LÍMITE DE PAGO", "FECHA LIMITE DE PAGO"],
+                en: textoDeResumen, maximoCaracteres: 1_200)
+        } else {
+            resultado.fechaCorte = fechaCercaDe(["FECHA DE CORTE"], en: textoDeResumen)
+            resultado.fechaLimitePago = fechaCercaDe(
+                ["FECHA LIMITE", "FECHA LÍMITE", "LIMITE DE PAGO", "LÍMITE DE PAGO", "PAGAR ANTES"],
+                en: textoDeResumen)
+        }
         resultado.pagoParaNoGenerarIntereses = montoCercaDe(
             ["NO GENERAR INTERESES"], excluyendo: [], en: textoDeResumen)
         resultado.pagoMinimo = montoCercaDe(
             ["PAGO MINIMO", "PAGO MÍNIMO"],
             excluyendo: ["COMPRAS", "DIFERIDOS", "MESES"],
             en: textoDeResumen)
-        resultado.saldoAlCorte = montoCercaDe(
-            ["SALDO DEUDOR TOTAL", "SALDO ACTUAL AL CORTE", "SALDO AL CORTE",
-             "SALDO ACTUAL", "SALDO TOTAL"],
-            excluyendo: [], en: textoDeResumen)
+        resultado.saldoAlCorte = esHeyBanco
+            ? montoDespuesDeClave(["SALDO DEUDOR TOTAL"], en: textoDeResumen,
+                                  maximoCaracteres: 180)
+            : montoCercaDe(
+                ["SALDO DEUDOR TOTAL", "SALDO ACTUAL AL CORTE", "SALDO AL CORTE",
+                 "SALDO ACTUAL", "SALDO TOTAL"],
+                excluyendo: [], en: textoDeResumen)
 
         // Para fechas sin año (Liverpool escribe "03-JUL"), usamos el del corte
         let anioCorte = Calendar.current.component(.year,
                                                    from: resultado.fechaCorte ?? .now)
+
+        // Hey sí contiene una capa digital precisa. Su tabla se reparte en
+        // varios renglones (el importe puede quedar debajo de la descripción),
+        // por lo que el lector genérico línea-a-línea perdía Telcel y CFE.
+        // Si la sección digital está disponible, se reconstruye explícitamente.
+        if esHeyBanco, let resumenDigital {
+            let movimientosHey = analizarMovimientosHey(
+                resumenDigital, fechaCorte: resultado.fechaCorte)
+            if !movimientosHey.isEmpty {
+                resultado.movimientos = movimientosHey
+                return resultado
+            }
+        }
 
         for lineaCruda in textoDeMovimientos.components(separatedBy: .newlines) {
             let linea = lineaCruda.trimmingCharacters(in: .whitespaces)
@@ -376,6 +404,127 @@ enum AnalizadorEstadoDeCuenta {
                 montoOriginal: 0))
         }
         return resultado
+    }
+
+    /// Reconstruye la tabla digital de Hey Banco. El documento coloca los
+    /// importes en renglones separados aunque visualmente pertenezcan a la
+    /// misma fila. Se conservan cargos reales y la fila maestra del plan;
+    /// pagos, intereses, IVA y el desglose de capital quedan fuera.
+    private static func analizarMovimientosHey(
+        _ texto: String, fechaCorte: Date?) -> [MovimientoDetectado] {
+        guard let rangoInicio = texto.range(
+            of: "DESGLOSE DE MOVIMIENTOS",
+            options: [.caseInsensitive, .diacriticInsensitive]) else { return [] }
+
+        let despuesDelTitulo = String(texto[rangoInicio.upperBound...])
+        let seccion: String
+        if let rangoFin = despuesDelTitulo.range(
+            of: "UNIDAD ESPECIALIZADA DE ATENCIÓN A USUARIOS",
+            options: [.caseInsensitive, .diacriticInsensitive]) {
+            seccion = String(despuesDelTitulo[..<rangoFin.lowerBound])
+        } else {
+            seccion = despuesDelTitulo
+        }
+
+        var movimientos: [MovimientoDetectado] = []
+
+        // Una fila de plan contiene: fecha, descripción, monto original,
+        // saldo pendiente, interés, IVA, pago requerido y número de pago.
+        let patronDiferido = #"(\d{1,2}[-/][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,4}[-/]\d{4})\s+(.{3,260}?)\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+\$\s*([\d,]+\.\d{2})\s+(\d{1,2})\s+[Dd][Ee]\s+(\d{1,2})"#
+        if let regex = try? NSRegularExpression(
+            pattern: patronDiferido,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]) {
+            let rango = NSRange(seccion.startIndex..., in: seccion)
+            for coincidencia in regex.matches(in: seccion, range: rango) {
+                func grupo(_ numero: Int) -> String {
+                    guard let r = Range(coincidencia.range(at: numero), in: seccion)
+                    else { return "" }
+                    return String(seccion[r])
+                }
+
+                guard let fecha = extraerFecha(de: grupo(1)),
+                      let numero = Int(grupo(8)),
+                      let total = Int(grupo(9)),
+                      total >= 1, numero <= total,
+                      let montoOriginal = numeroMonetario(grupo(3)),
+                      let pagoRequerido = numeroMonetario(grupo(7)),
+                      pagoRequerido > 0 else { continue }
+                if let fechaCorte,
+                   fechaDeMovimiento(fecha, dentroDelCorte: fechaCorte) == nil {
+                    continue
+                }
+
+                movimientos.append(MovimientoDetectado(
+                    fecha: fecha,
+                    comercio: limpiarComercioHey(grupo(2)),
+                    monto: pagoRequerido,
+                    esMSI: true,
+                    msiNumero: numero,
+                    msiTotal: total,
+                    montoOriginal: montoOriginal))
+            }
+        }
+
+        // Filas regulares: PDFKit deja el signo al final del renglón y el
+        // importe en el siguiente. El patrón acepta ambas presentaciones.
+        let patronRegular = #"^(\d{1,2}[-/][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,4}[-/]\d{4})\s+(\d{1,2}[-/][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,4}[-/]\d{4})\s+(.{3,260}?)\s+([+\-])\s*(?:\r?\n\s*)?\$\s*([\d,]+\.\d{2})"#
+        if let regex = try? NSRegularExpression(
+            pattern: patronRegular,
+            options: [.caseInsensitive, .anchorsMatchLines]) {
+            let rango = NSRange(seccion.startIndex..., in: seccion)
+            for coincidencia in regex.matches(in: seccion, range: rango) {
+                func grupo(_ numero: Int) -> String {
+                    guard let r = Range(coincidencia.range(at: numero), in: seccion)
+                    else { return "" }
+                    return String(seccion[r])
+                }
+
+                guard grupo(4) == "+",
+                      let fechaCruda = extraerFecha(de: grupo(1)),
+                      let monto = numeroMonetario(grupo(5)), monto > 0 else { continue }
+                let fecha: Date
+                if let fechaCorte {
+                    guard let validada = fechaDeMovimiento(
+                        fechaCruda, dentroDelCorte: fechaCorte) else { continue }
+                    fecha = validada
+                } else {
+                    fecha = fechaCruda
+                }
+
+                var descripcion = limpiarComercioHey(grupo(3))
+                let mayus = normalizarParaBusqueda(descripcion)
+                let esPago = ["PAGO TDC", "SU PAGO", "PAGO POR SPEI",
+                              "PAGO RECIBIDO", "GRACIAS POR SU PAGO"]
+                    .contains { mayus.contains($0) }
+                let esCargoBancario = ["INTERESES", "INT. DE PD", "IVA INT.",
+                                       "COMISION", "COMISIÓN"]
+                    .contains { mayus.contains($0) }
+                guard !esPago, !esCargoBancario,
+                      !esDesgloseDePlanHey(mayus) else { continue }
+
+                var esMSI = false
+                var numero = 0
+                var total = 0
+                let separado = separarContador(descripcion)
+                if let n = separado.1, let t = separado.2, t >= 1, n <= t {
+                    descripcion = separado.0
+                    esMSI = true
+                    numero = n
+                    total = t
+                }
+
+                movimientos.append(MovimientoDetectado(
+                    fecha: fecha,
+                    comercio: descripcion,
+                    monto: monto,
+                    esMSI: esMSI,
+                    msiNumero: numero,
+                    msiTotal: total,
+                    montoOriginal: 0))
+            }
+        }
+
+        return movimientos.sorted { $0.fecha < $1.fecha }
     }
 
     // MARK: - Piezas del lector multi-banco
@@ -648,6 +797,59 @@ enum AnalizadorEstadoDeCuenta {
         return Calendar.current.date(from: componentes)
     }
 
+    /// Hey imprime el periodo como "14-jun-2026 al 13-jul-2026". El último
+    /// día de ese intervalo es exactamente la fecha de corte.
+    private static func fechaFinalDelPeriodoHey(en texto: String) -> Date? {
+        let patron = #"(\d{1,2})[-/ ]([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,4}|\d{1,2})[-/ ](\d{2,4})\s+(?:AL|A)\s+(\d{1,2})[-/ ]([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,4}|\d{1,2})[-/ ](\d{2,4})"#
+        guard let regex = try? NSRegularExpression(
+            pattern: patron, options: [.caseInsensitive]),
+              let coincidencia = regex.firstMatch(
+                in: texto, range: NSRange(texto.startIndex..., in: texto))
+        else { return nil }
+
+        func grupo(_ numero: Int) -> String {
+            guard let rango = Range(coincidencia.range(at: numero), in: texto)
+            else { return "" }
+            return String(texto[rango])
+        }
+        return fechaDeLinea(dia: grupo(4), mes: grupo(5), anio: grupo(6))
+    }
+
+    /// Busca una fecha solo después de una etiqueta concreta. Esto evita que
+    /// una cantidad o fecha situada antes de la etiqueta se asocie al campo.
+    private static func fechaDespuesDeClave(
+        _ claves: [String], en texto: String,
+        maximoCaracteres: Int) -> Date? {
+        for clave in claves {
+            guard let segmento = segmentoDespuesDeClave(
+                clave, en: texto, maximoCaracteres: maximoCaracteres) else { continue }
+            if let fecha = extraerFecha(de: segmento) { return fecha }
+        }
+        return nil
+    }
+
+    private static func montoDespuesDeClave(
+        _ claves: [String], en texto: String,
+        maximoCaracteres: Int) -> Double? {
+        for clave in claves {
+            guard let segmento = segmentoDespuesDeClave(
+                clave, en: texto, maximoCaracteres: maximoCaracteres) else { continue }
+            if let monto = primerMonto(en: segmento), monto > 0 { return monto }
+        }
+        return nil
+    }
+
+    private static func segmentoDespuesDeClave(
+        _ clave: String, en texto: String,
+        maximoCaracteres: Int) -> String? {
+        guard let rango = texto.range(
+            of: clave, options: [.caseInsensitive, .diacriticInsensitive]) else { return nil }
+        let disponibles = texto.distance(from: rango.upperBound, to: texto.endIndex)
+        let fin = texto.index(rango.upperBound,
+                              offsetBy: min(maximoCaracteres, disponibles))
+        return String(texto[rango.upperBound..<fin])
+    }
+
     private static func fechaCercaDe(_ claves: [String], en texto: String) -> Date? {
         let lineas = texto.components(separatedBy: .newlines)
         let clavesNormalizadas = claves.map { normalizarParaBusqueda($0) }
@@ -753,6 +955,28 @@ enum AnalizadorEstadoDeCuenta {
             numero = numero.replacingOccurrences(of: ",", with: "")
         }
         return Double(numero)
+    }
+
+    private static func numeroMonetario(_ texto: String) -> Double? {
+        Double(texto.replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Quita el identificador de la tarjeta que Hey antepone al comercio y
+    /// compacta los saltos que PDFKit introduce dentro de una sola celda.
+    private static func limpiarComercioHey(_ texto: String) -> String {
+        var limpio = texto.replacingOccurrences(
+            of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let regex = try? NSRegularExpression(
+            pattern: #"^(?:TITULAR|VIRTUAL)\s+#?\d{12,19}\s+"#,
+            options: [.caseInsensitive]),
+           let coincidencia = regex.firstMatch(
+            in: limpio, range: NSRange(limpio.startIndex..., in: limpio)),
+           let rango = Range(coincidencia.range, in: limpio) {
+            limpio.removeSubrange(rango)
+        }
+        return limpiarComercio(limpio)
     }
 
     private static func normalizarParaBusqueda(_ texto: String) -> String {
