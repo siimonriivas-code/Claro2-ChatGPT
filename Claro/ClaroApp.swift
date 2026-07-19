@@ -29,7 +29,12 @@ struct ClaroApp: App {
             Participacion.self,
             Deuda.self,
             Categoria.self,
-            RegistroDeCambio.self
+            RegistroDeCambio.self,
+            IngresoRecurrente.self,
+            OcurrenciaIngresoRecurrente.self,
+            ConversacionFinanciera.self,
+            MensajeFinanciero.self,
+            ConciliacionCuentaBancaria.self
         ])
     }
 }

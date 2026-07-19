@@ -15,7 +15,6 @@ struct TarjetaDetalleView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
 
-    @State private var mostrandoNuevoCorte = false
     @State private var mostrandoPago = false
     @State private var mostrandoImportador = false
     @State private var mostrandoEdicion = false
@@ -145,14 +144,9 @@ struct TarjetaDetalleView: View {
                     }
                 }
 
-                HStack(spacing: 12) {
-                    botonAccion(titulo: "Registrar pago",
-                                icono: "checkmark.circle.fill",
-                                color: Tema.positivo) { mostrandoPago = true }
-                    botonAccion(titulo: "Registrar corte",
-                                icono: "scissors",
-                                color: Tema.acento) { mostrandoNuevoCorte = true }
-                }
+                botonAccion(titulo: "Registrar pago",
+                            icono: "checkmark.circle.fill",
+                            color: Tema.positivo) { mostrandoPago = true }
 
                 Button {
                     mostrandoImportador = true
@@ -174,7 +168,7 @@ struct TarjetaDetalleView: View {
                     panelEstadoDeCuenta(vigente, destacado: true)
                 } else {
                     Panel {
-                        Text("Aún no registras ningún corte de esta tarjeta. Cuando tu banco genere el estado de cuenta, captúralo con \"Registrar corte\".")
+                        Text("Aún no hay un corte importado. Cuando tu banco genere el estado de cuenta, usa el botón de PDF para cargarlo.")
                             .font(.footnote)
                             .foregroundStyle(Tema.textoSecundario)
                     }
@@ -290,9 +284,6 @@ struct TarjetaDetalleView: View {
             Button("No", role: .cancel) { }
         } message: {
             Text("Se eliminarán la tarjeta, sus \(tarjeta.movimientos.count) movimientos, sus estados de cuenta y sus planes a meses. Esta acción no se puede deshacer.")
-        }
-        .sheet(isPresented: $mostrandoNuevoCorte) {
-            NuevoEstadoDeCuentaView(tarjeta: tarjeta)
         }
         .sheet(isPresented: $mostrandoPago) {
             PagoTarjetaView(tarjetaInicial: tarjeta)

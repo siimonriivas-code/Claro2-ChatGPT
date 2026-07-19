@@ -18,6 +18,7 @@ struct CuentaDetalleView: View {
 
     @State private var mostrandoEdicion = false
     @State private var mostrandoFusion = false
+    @State private var mostrandoImportacion = false
     @State private var confirmandoEliminacion = false
 
     private var movimientosOrdenados: [Movimiento] {
@@ -44,6 +45,12 @@ struct CuentaDetalleView: View {
                 }
 
                 TituloSeccion(texto: "Movimientos")
+
+                Button { mostrandoImportacion = true } label: {
+                    Label("Importar estado de cuenta (PDF)", systemImage: "doc.text.viewfinder")
+                        .frame(maxWidth: .infinity).padding(.vertical, 11)
+                }
+                .buttonStyle(.borderedProminent).tint(Tema.acento)
 
                 if movimientosOrdenados.isEmpty {
                     Panel {
@@ -101,10 +108,13 @@ struct CuentaDetalleView: View {
         .sheet(isPresented: $mostrandoEdicion) {
             EditarCuentaView(cuenta: cuenta)
         }
-        .sheet(isPresented: $mostrandoFusion) {
+       .sheet(isPresented: $mostrandoFusion) {
             FusionarCuentaView(cuentaOrigen: cuenta) {
                 cerrar()
-            }
+       }
+        .sheet(isPresented: $mostrandoImportacion) {
+            ImportarEstadoDebitoView(cuenta: cuenta)
+        }
         }
         .confirmationDialog("¿Eliminar esta cuenta?",
                             isPresented: $confirmandoEliminacion,

@@ -19,6 +19,10 @@ struct NuevaDeudaView: View {
     @State private var monto: Double?
     @State private var fecha: Date = .now
     @State private var notas = ""
+    @State private var tasaAnual: Double?
+    @State private var cat: Double?
+    @State private var plazoMeses: Int?
+    @State private var mensualidad: Double?
 
     private var puedeGuardar: Bool {
         !acreedor.trimmingCharacters(in: .whitespaces).isEmpty
@@ -41,6 +45,12 @@ struct NuevaDeudaView: View {
                 } footer: {
                     Text("El saldo restante se calculará solo, conforme registres abonos (Ley 1).")
                 }
+                Section("Costo y plazo (opcional)") {
+                    TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)
+                    TextField("CAT %", value: $cat, format: .number).keyboardType(.decimalPad)
+                    TextField("Plazo en meses", value: $plazoMeses, format: .number).keyboardType(.numberPad)
+                    TextField("Mensualidad", value: $mensualidad, format: .number).keyboardType(.decimalPad)
+                }
             }
             .scrollContentBackground(.hidden)
             .background(Tema.fondo.ignoresSafeArea())
@@ -56,7 +66,9 @@ struct NuevaDeudaView: View {
                             acreedor: acreedor.trimmingCharacters(in: .whitespaces),
                             montoOriginal: monto ?? 0,
                             fecha: fecha,
-                            notas: notas.trimmingCharacters(in: .whitespaces)))
+                            notas: notas.trimmingCharacters(in: .whitespaces),
+                            tasaAnual: tasaAnual, cat: cat,
+                            plazoMeses: plazoMeses, mensualidad: mensualidad))
                         cerrar()
                     }
                     .disabled(!puedeGuardar)
@@ -225,6 +237,13 @@ struct DeudaDetalleView: View {
                                 .font(.caption)
                                 .foregroundStyle(Tema.textoSecundario)
                         }
+                        if deuda.cat != nil || deuda.tasaAnual != nil || deuda.mensualidad != nil {
+                            Text([deuda.cat.map { "CAT \($0.formatted())%" },
+                                  deuda.tasaAnual.map { "tasa \($0.formatted())% anual" },
+                                  deuda.mensualidad.map { "mensualidad \($0.comoDinero)" }]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(Tema.textoSecundario)
+                        }
                     }
                 }
 
@@ -328,6 +347,10 @@ struct EditarDeudaView: View {
     @State private var monto: Double?
     @State private var fecha: Date
     @State private var notas: String
+    @State private var tasaAnual: Double?
+    @State private var cat: Double?
+    @State private var plazoMeses: Int?
+    @State private var mensualidad: Double?
 
     init(deuda: Deuda) {
         self.deuda = deuda
@@ -335,6 +358,10 @@ struct EditarDeudaView: View {
         _monto = State(initialValue: deuda.montoOriginal)
         _fecha = State(initialValue: deuda.fecha)
         _notas = State(initialValue: deuda.notas)
+        _tasaAnual = State(initialValue: deuda.tasaAnual)
+        _cat = State(initialValue: deuda.cat)
+        _plazoMeses = State(initialValue: deuda.plazoMeses)
+        _mensualidad = State(initialValue: deuda.mensualidad)
     }
 
     var body: some View {
@@ -352,6 +379,12 @@ struct EditarDeudaView: View {
                 } footer: {
                     Text("⚠️ Cambiar el monto original recalcula el saldo restante (Ley 1).")
                 }
+                Section("Costo y plazo") {
+                    TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)
+                    TextField("CAT %", value: $cat, format: .number).keyboardType(.decimalPad)
+                    TextField("Plazo en meses", value: $plazoMeses, format: .number).keyboardType(.numberPad)
+                    TextField("Mensualidad", value: $mensualidad, format: .number).keyboardType(.decimalPad)
+                }
             }
             .scrollContentBackground(.hidden)
             .background(Tema.fondo.ignoresSafeArea())
@@ -367,6 +400,8 @@ struct EditarDeudaView: View {
                         deuda.montoOriginal = (monto ?? 0).redondeadoAMoneda
                         deuda.fecha = fecha
                         deuda.notas = notas.trimmingCharacters(in: .whitespaces)
+                        deuda.tasaAnual = tasaAnual; deuda.cat = cat
+                        deuda.plazoMeses = plazoMeses; deuda.mensualidad = mensualidad
                         cerrar()
                     }
                     .disabled(acreedor.trimmingCharacters(in: .whitespaces).isEmpty

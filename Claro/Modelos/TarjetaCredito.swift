@@ -19,6 +19,8 @@ final class TarjetaCredito {
     var saldoInicial: Double        // deuda que ya traía al darla de alta
     var fechaSaldoInicial: Date
     var colorHex: String
+    var tasaAnual: Double? = nil
+    var cat: Double? = nil
 
     var banco: Banco?
 
@@ -39,7 +41,9 @@ final class TarjetaCredito {
          saldoInicial: Double = 0,
          fechaSaldoInicial: Date = .now,
          colorHex: String = "6C8CFF",
-         banco: Banco? = nil) {
+         banco: Banco? = nil,
+         tasaAnual: Double? = nil,
+         cat: Double? = nil) {
         self.nombre = nombre
         self.ultimosDigitos = ultimosDigitos
         self.limiteCredito = limiteCredito.redondeadoAMoneda
@@ -49,5 +53,7 @@ final class TarjetaCredito {
         self.fechaSaldoInicial = fechaSaldoInicial
         self.colorHex = colorHex
         self.banco = banco
+        self.tasaAnual = tasaAnual
+        self.cat = cat
     }
 }

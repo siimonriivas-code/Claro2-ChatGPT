@@ -20,6 +20,9 @@ struct AnalisisView: View {
     @Query private var tarjetas: [TarjetaCredito]
     @Query private var personas: [Persona]
     @Query private var deudas: [Deuda]
+    @Query private var ingresosRecurrentes: [IngresoRecurrente]
+    @Query private var ocurrenciasIngreso: [OcurrenciaIngresoRecurrente]
+    @AppStorage("modoHistoricoActivo") private var modoHistoricoActivo = false
 
     @State private var mostrandoConfiguracion = false
 
@@ -34,7 +37,7 @@ struct AnalisisView: View {
         let calendario = Calendar.current
         var dict: [Date: ResumenMes] = [:]
 
-        for m in movimientos where m.cuentaParaCalculos {
+        for m in movimientos where m.cuentaParaCalculos && m.fecha <= FechaAnalisisClaro.actual {
             let clave = calendario.date(from:
                 calendario.dateComponents([.year, .month], from: m.fecha)) ?? m.fecha
             var resumen = dict[clave] ?? ResumenMes(id: clave, ingresos: 0, egresos: 0)
@@ -76,7 +79,7 @@ struct AnalisisView: View {
 
     private var gastosPorCategoria: [GastoCategoria] {
         let calendario = Calendar.current
-        let ahora = Date.now
+        let ahora = FechaAnalisisClaro.actual
         var dict: [String: (icono: String, color: String, monto: Double)] = [:]
 
         for m in movimientos where m.cuentaParaCalculos
@@ -108,17 +111,22 @@ struct AnalisisView: View {
     }
 
     private var recurrentes: [CargoRecurrenteDetectado] {
-        MotorPredictivo.recurrentes(movimientos: movimientos)
+        MotorPredictivo.recurrentes(movimientos: movimientos.filter { $0.fecha <= FechaAnalisisClaro.actual })
+    }
+
+    private var fotoFinanciera: ResumenFinancieroClaro {
+        MotorClaroInteligente.resumir(cuentas: cuentas, tarjetas: tarjetas,
+            personas: personas, planes: planes, deudas: deudas,
+            movimientos: movimientos, ingresosRecurrentes: ingresosRecurrentes,
+            ocurrenciasIngreso: ocurrenciasIngreso, ahora: FechaAnalisisClaro.actual)
     }
 
     private var patrimonio: Double {
-        MotorPredictivo.patrimonioActual(cuentas: cuentas, tarjetas: tarjetas,
-                                         personas: personas, deudas: deudas)
+        fotoFinanciera.patrimonio
     }
 
     private var disponible30: Double {
-        MotorPredictivo.disponibleEn30Dias(cuentas: cuentas, tarjetas: tarjetas,
-                                           recurrentes: recurrentes)
+        fotoFinanciera.proyeccionFinDeMes
     }
 
     private var historialPatrimonio: [PuntoPatrimonio] {
@@ -130,6 +138,13 @@ struct AnalisisView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    if modoHistoricoActivo {
+                        Label("Analizando como si hoy fuera \(FechaAnalisisClaro.actual.formatted(date: .long, time: .omitted))",
+                              systemImage: "clock.arrow.circlepath")
+                            .font(.footnote.weight(.semibold)).foregroundStyle(Tema.advertencia)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12).background(Tema.advertencia.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    }
 
                     TituloSeccion(texto: "Panorama financiero")
                     Panel {

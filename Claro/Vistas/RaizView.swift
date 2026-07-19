@@ -59,6 +59,7 @@ struct RaizView: View {
         }
         .aparienciaDeLaApp()
         .task {
+            MigradorDatosClaro.ejecutarSiHaceFalta(contexto: contexto)
             Sembrador.sembrarSiHaceFalta(contexto: contexto)
             if !onboardingCompletado && bancos.isEmpty
                 && cuentas.isEmpty && tarjetas.isEmpty {

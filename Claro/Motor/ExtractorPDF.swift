@@ -18,7 +18,7 @@ enum ExtractorPDF {
     /// más fiable para el cuadro de pago, mientras que OCR reconstruye mejor
     /// las filas de movimientos. Este prefijo permite que el analizador use
     /// la copia digital solo para el resumen y nunca duplique movimientos.
-    static let prefijoResumenDigital = "[[CLARO:RESUMEN_DIGITAL]]"
+    nonisolated static let prefijoResumenDigital = "[[CLARO:RESUMEN_DIGITAL]]"
 
     /// Huella irreversible del archivo para reconocer el mismo estado de
     /// cuenta sin conservar el PDF ni exponer sus datos.
@@ -61,6 +61,7 @@ enum ExtractorPDF {
         let textoDocumento = normalizar(textosDigitales.joined(separator: "\n"))
         let esHeyBanco = textoDocumento.contains("HEY BANCO")
             || textoDocumento.contains("HEYBANCO")
+        let esRappiCard = textoDocumento.contains("RAPPICARD")
 
         var resultado: [String] = []
 
@@ -77,8 +78,21 @@ enum ExtractorPDF {
             guard let pagina = documento.page(at: indice) else { continue }
             let textoDigital = textosDigitales[indice]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            let textoPagina = normalizar(textoDigital)
 
-            let necesitaOCR = esHeyBanco || !tieneTextoUtil(textoDigital)
+            // RappiCard trae una capa de texto abundante, pero su fuente
+            // incrustada pierde precisamente los dígitos al pasar por
+            // PDFKit: las fechas quedan como "-jul-" y los importes como
+            // "$.", aunque visualmente sean correctos. Solo se aplica OCR
+            // a las dos secciones financieras para evitar procesar las
+            // páginas de glosario, avisos y CFDI sin necesidad.
+            let necesitaOCRRappi = esRappiCard && (
+                textoPagina.contains("TU PAGO REQUERIDO ESTE PERIODO")
+                || textoPagina.contains("DESGLOSE DE MOVIMIENTOS")
+            )
+
+            let necesitaOCR = esHeyBanco || necesitaOCRRappi
+                || !tieneTextoUtil(textoDigital)
             if necesitaOCR,
                let textoOCR = reconocerTexto(en: pagina),
                tieneTextoUtil(textoOCR) {
@@ -116,8 +130,9 @@ enum ExtractorPDF {
             solicitud.usesLanguageCorrection = true
             solicitud.minimumTextHeight = 0.006
             solicitud.customWords = [
-                "Liverpool", "Hey Banco", "Telcel", "CFE",
-                "pago mínimo", "saldo al corte"
+                "Liverpool", "Hey Banco", "RappiCard", "Banorte",
+                "Pago por SPEI", "Telcel", "CFE", "pago mínimo",
+                "saldo al corte", "saldo deudor total"
             ]
 
             let manejador = VNImageRequestHandler(cgImage: cgImage,

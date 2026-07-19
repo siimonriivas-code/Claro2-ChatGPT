@@ -10,6 +10,7 @@ import SwiftUI
 
 struct ClaroInteligenteView: View {
     @Environment(\.dismiss) private var cerrar
+    @Environment(\.modelContext) private var contexto
 
     @Query private var cuentas: [CuentaBancaria]
     @Query private var tarjetas: [TarjetaCredito]
@@ -17,6 +18,10 @@ struct ClaroInteligenteView: View {
     @Query private var planes: [PlanMSI]
     @Query private var deudas: [Deuda]
     @Query(sort: \Movimiento.fecha, order: .reverse) private var movimientos: [Movimiento]
+    @Query private var ingresosRecurrentes: [IngresoRecurrente]
+    @Query private var ocurrenciasIngreso: [OcurrenciaIngresoRecurrente]
+    @Query(sort: \ConversacionFinanciera.actualizadaEl, order: .reverse)
+    private var conversaciones: [ConversacionFinanciera]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
     @StateObject private var qwen = AdministradorQwen.shared
@@ -24,7 +29,11 @@ struct ClaroInteligenteView: View {
     @State private var mensajes: [MensajeClaro] = []
     @State private var pregunta = ""
     @State private var pensando = false
+    @State private var tareaRespuesta: Task<Void, Never>?
+    @State private var solicitudActiva: UUID?
     @State private var confirmarEliminacionQwen = false
+    @State private var conversacionActual: ConversacionFinanciera?
+    @State private var mostrandoHistorial = false
     @FocusState private var escribiendo: Bool
 
     private let sugerencias = [
@@ -37,14 +46,15 @@ struct ClaroInteligenteView: View {
     private var resumen: ResumenFinancieroClaro {
         MotorClaroInteligente.resumir(
             cuentas: cuentas, tarjetas: tarjetas, personas: personas,
-            planes: planes, deudas: deudas, movimientos: movimientos)
+            planes: planes, deudas: deudas, movimientos: movimientos,
+            ingresosRecurrentes: ingresosRecurrentes,
+            ocurrenciasIngreso: ocurrenciasIngreso,
+            ahora: FechaAnalisisClaro.actual)
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                encabezado
-                panelQwen
                 conversacion
                 compositor
             }
@@ -55,19 +65,26 @@ struct ClaroInteligenteView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cerrar") {
                         voz.detener()
+                        cancelarRespuestaActiva()
                         cerrar()
                     }
                     .foregroundStyle(Tema.positivo)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Pildora(texto: ClaroInteligenciaLocal.nombreMotorDisponible,
-                            color: Tema.acento)
+                    menuInformacion
                 }
             }
         }
         .aparienciaDeLaApp()
         .task {
             await qwen.prepararAlAbrir()
+            if conversacionActual == nil, let reciente = conversaciones.first {
+                cargar(reciente: reciente)
+            }
+        }
+        .onDisappear {
+            voz.detener()
+            cancelarRespuestaActiva()
         }
         .onChange(of: voz.texto) { _, texto in
             guard voz.estaEscuchando || !texto.isEmpty else { return }
@@ -91,186 +108,83 @@ struct ClaroInteligenteView: View {
             } message: {
                 Text("Se liberarán aproximadamente \(qwen.tamanoAproximado). Tus datos financieros y estados de cuenta no se tocarán.")
             }
-    }
-
-    private var encabezado: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(Tema.acento)
-                    .frame(width: 42, height: 42)
-                    .background(Tema.acento.opacity(0.14), in: Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Pregúntame sin llenar formularios")
-                        .font(.headline)
-                        .foregroundStyle(Tema.textoPrincipal)
-                    Text("Tus datos y el análisis permanecen en este iPhone")
-                        .font(.caption)
-                        .foregroundStyle(Tema.textoSecundario)
-                }
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: 8) {
-                miniIndicador(titulo: "Riesgo", valor: resumen.nivelRiesgo.rawValue,
-                              color: colorRiesgo)
-                miniIndicador(titulo: "Cierre", valor: resumen.proyeccionFinDeMes.comoDinero,
-                              color: resumen.proyeccionFinDeMes >= 0 ? Tema.positivo : Tema.urgente)
-                miniIndicador(titulo: "Confianza", valor: resumen.confianza.capitalized,
-                              color: Tema.acento)
-            }
+        .sheet(isPresented: $mostrandoHistorial) {
+            HistorialConversacionesClaroView(
+                conversaciones: conversaciones,
+                seleccionar: { conversacion in
+                    cargar(reciente: conversacion)
+                    mostrandoHistorial = false
+                })
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(Tema.panel)
-    }
-
-    private var panelQwen: some View {
-        VStack(spacing: 8) {
-            Picker("Modelo local", selection: Binding(
-                get: { qwen.modeloSeleccionado },
-                set: { modelo in
-                    Task { await qwen.seleccionar(modelo) }
-                })) {
-                    ForEach(ModeloQwen.allCases) { modelo in
-                        Text(modelo.nombreSelector).tag(modelo)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(!qwen.puedeCambiarModelo)
-
-            HStack(spacing: 10) {
-                Image(systemName: "brain.head.profile")
-                    .font(.headline)
-                    .foregroundStyle(qwen.estaListo ? Tema.positivo : Tema.acento)
-                    .frame(width: 34, height: 34)
-                    .background((qwen.estaListo ? Tema.positivo : Tema.acento).opacity(0.13),
-                                in: Circle())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(qwen.nombreVisible) · chat avanzado")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Tema.textoPrincipal)
-                    Text(qwen.descripcionEstado)
-                        .font(.caption)
-                        .foregroundStyle(Tema.textoSecundario)
-                        .lineLimit(4)
-                }
-                Spacer(minLength: 6)
-                controlQwen
-            }
-
-            if case .descargando(let avance) = qwen.estado {
-                ProgressView(value: avance)
-                    .tint(Tema.acento)
-            }
-
-            Text(qwen.modeloSeleccionado.descripcionCapacidad)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(qwen.modeloSeleccionado == .potente8B
-                                 ? Tema.positivo : Tema.textoSecundario)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let metricas = qwen.metricasUltimaRespuesta {
-                Text(metricas.descripcion)
-                    .font(.caption2)
-                    .foregroundStyle(Tema.textoSecundario)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Text("Qwen solo responde en este chat; nunca identifica ni importa estados de cuenta.")
-                .font(.caption2)
-                .foregroundStyle(Tema.textoSecundario)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Tema.panelElevado.opacity(0.72))
-        .overlay(alignment: .bottom) { Divider().overlay(Tema.panelElevado) }
     }
 
     @ViewBuilder
-    private var controlQwen: some View {
-        switch qwen.estado {
-        case .noDescargado:
-            Button("Descargar") {
-                Task { await qwen.descargar() }
-            }
-            .font(.caption.weight(.bold))
-            .buttonStyle(.borderedProminent)
-            .tint(Tema.acento)
-            .accessibilityHint("Descarga opcional de aproximadamente \(qwen.tamanoAproximado)")
-
-        case .descargando:
-            ProgressView()
-                .tint(Tema.acento)
-
-        case .descargado:
-            Button("Preparar") {
-                Task { await qwen.prepararSiEstaDescargado() }
-            }
-            .font(.caption.weight(.bold))
-            .buttonStyle(.borderedProminent)
-            .tint(Tema.positivo)
-
-        case .cargando:
-            ProgressView()
-                .tint(Tema.acento)
-
-        case .listo:
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Tema.positivo)
-                    .accessibilityLabel("Qwen listo")
-                Button {
-                    confirmarEliminacionQwen = true
-                } label: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(Tema.textoSecundario)
+    private var menuInformacion: some View {
+        Menu {
+            Section("Conversaciones") {
+                Button { nuevaConversacion() } label: {
+                    Label("Nuevo chat", systemImage: "square.and.pencil")
                 }
-                .accessibilityLabel("Eliminar Qwen")
+                Button { mostrandoHistorial = true } label: {
+                    Label("Historial", systemImage: "clock.arrow.circlepath")
+                }
+            }
+            Section("Panorama") {
+                Label("Riesgo: \(resumen.nivelRiesgo.rawValue)",
+                      systemImage: "shield.lefthalf.filled")
+                Label("Cierre estimado: \(resumen.proyeccionFinDeMes.comoDinero)",
+                      systemImage: "calendar")
+                Label("Confianza: \(resumen.confianza.capitalized)",
+                      systemImage: "checkmark.seal")
             }
 
-        case .error:
-            Button(qwen.estaDescargado ? "Preparar" : "Reintentar") {
-                Task {
-                    if qwen.estaDescargado {
-                        await qwen.prepararSiEstaDescargado()
-                    } else {
-                        await qwen.descargar()
+            Section("Inteligencia local") {
+                switch qwen.estado {
+                case .noDescargado:
+                    Button {
+                        qwen.iniciarDescarga()
+                    } label: {
+                        Label("Descargar Qwen 4B", systemImage: "arrow.down.circle")
+                    }
+
+                case .descargando:
+                    Button {
+                        qwen.cancelarDescarga()
+                    } label: {
+                        Label("Cancelar descarga", systemImage: "xmark.circle")
+                    }
+
+                case .descargado, .listo:
+                    Label("Apple + Qwen disponibles",
+                          systemImage: "checkmark.circle.fill")
+                    Button(role: .destructive) {
+                        confirmarEliminacionQwen = true
+                    } label: {
+                        Label("Eliminar Qwen del iPhone", systemImage: "trash")
+                    }
+
+                case .cargando:
+                    Label("Preparando respuesta…", systemImage: "hourglass")
+
+                case .error:
+                    Button {
+                        Task {
+                            if qwen.estaDescargado {
+                                await qwen.prepararAlAbrir()
+                            } else {
+                                qwen.iniciarDescarga()
+                            }
+                        }
+                    } label: {
+                        Label("Reintentar IA local", systemImage: "arrow.clockwise")
                     }
                 }
             }
-            .font(.caption.weight(.bold))
-            .buttonStyle(.bordered)
-            .tint(Tema.acento)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.title3)
         }
-    }
-
-    private func miniIndicador(titulo: String, valor: String, color: Color) -> some View {
-        VStack(spacing: 2) {
-            Text(titulo.uppercased())
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Tema.textoSecundario)
-            Text(valor)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.70)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(Tema.panelElevado, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var colorRiesgo: Color {
-        switch resumen.nivelRiesgo {
-        case .bajo: return Tema.positivo
-        case .moderado: return Tema.advertencia
-        case .alto, .critico: return Tema.urgente
-        }
+        .accessibilityLabel("Información y opciones")
     }
 
     private var conversacion: some View {
@@ -287,9 +201,7 @@ struct ClaroInteligenteView: View {
                     if pensando {
                         HStack(spacing: 8) {
                             ProgressView().tint(Tema.acento)
-                            Text(qwen.estaListo
-                                 ? "\(qwen.nombreVisible) está razonando con el resumen financiero…"
-                                 : "Analizando todos tus datos…")
+                            Text("Pensando…")
                                 .font(.footnote)
                                 .foregroundStyle(Tema.textoSecundario)
                             Spacer()
@@ -301,6 +213,7 @@ struct ClaroInteligenteView: View {
                 }
                 .padding(16)
             }
+            .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: mensajes.count) { _, _ in
                 withAnimation {
@@ -316,17 +229,16 @@ struct ClaroInteligenteView: View {
     }
 
     private var bienvenida: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Panel {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Dime lo que quieres saber")
-                        .font(.title3.bold())
-                        .foregroundStyle(Tema.textoPrincipal)
-                    Text("Puedo evaluar tu panorama, proyectar el mes, revisar deudas y opinar si un préstamo parece viable. Contesto primero y explico después.")
-                        .font(.subheadline)
-                        .foregroundStyle(Tema.textoSecundario)
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("¿Qué quieres saber?")
+                    .font(.title2.bold())
+                    .foregroundStyle(Tema.textoPrincipal)
+                Text("Pregunta sobre tus finanzas o conversa conmigo.")
+                    .font(.subheadline)
+                    .foregroundStyle(Tema.textoSecundario)
             }
+
             VStack(spacing: 8) {
                 ForEach(sugerencias, id: \.self) { sugerencia in
                     Button {
@@ -341,7 +253,8 @@ struct ClaroInteligenteView: View {
                             Image(systemName: "arrow.up.right")
                                 .foregroundStyle(Tema.acento)
                         }
-                        .padding(14)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
                         .background(Tema.panel, in: RoundedRectangle(cornerRadius: 16))
                     }
                     .buttonStyle(Presionable())
@@ -355,18 +268,21 @@ struct ClaroInteligenteView: View {
         HStack(alignment: .bottom) {
             if mensaje.esUsuario { Spacer(minLength: 44) }
             VStack(alignment: mensaje.esUsuario ? .trailing : .leading, spacing: 6) {
-                Text(textoVisible(mensaje.texto))
-                    .font(.body)
-                    .foregroundStyle(mensaje.esUsuario ? Color.white : Tema.textoPrincipal)
-                    .textSelection(.enabled)
-                if let fuente = mensaje.fuente {
-                    Label(fuente.rawValue,
-                          systemImage: iconoFuente(fuente))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Tema.textoSecundario)
+                if mensaje.esUsuario {
+                    Text(textoVisible(mensaje.texto))
+                        .font(.body)
+                        .foregroundStyle(Color.white)
+                        .textSelection(.enabled)
+                } else {
+                    RespuestaFinancieraFormateada(
+                        texto: textoVisible(mensaje.texto),
+                        estructurarParrafoLargo: mensaje.ambito.usaFormatoAnalitico)
+                        .foregroundStyle(Tema.textoPrincipal)
+                        .textSelection(.enabled)
                 }
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(
                 mensaje.esUsuario ? Tema.acento : Tema.panel,
                 in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -386,7 +302,7 @@ struct ClaroInteligenteView: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 10) {
-                TextField("Pregunta sobre tus finanzas", text: $pregunta, axis: .vertical)
+                TextField("Pregúntame lo que quieras", text: $pregunta, axis: .vertical)
                     .lineLimit(1...5)
                     .focused($escribiendo)
                     .submitLabel(.send)
@@ -421,7 +337,7 @@ struct ClaroInteligenteView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) { Divider().overlay(Tema.panelElevado) }
     }
@@ -441,21 +357,103 @@ struct ClaroInteligenteView: View {
         pregunta = ""
         escribiendo = false
 
-        let historial = mensajes.map {
-            TurnoConversacionClaro(esUsuario: $0.esUsuario, texto: $0.texto)
+        var historial = mensajes.suffix(12).map {
+            TurnoConversacionClaro(esUsuario: $0.esUsuario, texto: $0.texto,
+                                   ambito: $0.ambito)
         }
-        mensajes.append(MensajeClaro(esUsuario: true, texto: limpia, fuente: nil))
+        if let memoria = conversacionActual?.resumen, !memoria.isEmpty {
+            historial.insert(TurnoConversacionClaro(esUsuario: false,
+                texto: "Memoria resumida de mensajes anteriores: \(memoria)",
+                ambito: .general), at: 0)
+        }
+        let ambito = ClaroInteligenciaLocal.ambitoDeLaConsulta(limpia)
+        let mensajeUsuario = MensajeClaro(esUsuario: true, texto: limpia,
+                                          fuente: nil, ambito: ambito)
+        mensajes.append(mensajeUsuario)
+        let conversacion = obtenerConversacion(primeraPregunta: limpia)
+        guardar(mensajeUsuario, en: conversacion)
         pensando = true
         let fotoFinanciera = resumen
 
-        Task {
+        let idSolicitud = UUID()
+        solicitudActiva = idSolicitud
+        tareaRespuesta?.cancel()
+        tareaRespuesta = Task {
             let respuesta = await ClaroInteligenciaLocal.responder(
                 pregunta: limpia, resumen: fotoFinanciera, historial: historial)
-            mensajes.append(MensajeClaro(esUsuario: false,
-                                          texto: respuesta.texto,
-                                          fuente: respuesta.fuente))
+            guard !Task.isCancelled, solicitudActiva == idSolicitud else { return }
+            // El clasificador semántico puede comprender una referencia que
+            // el filtro rápido no vio. Guardamos el ámbito definitivo para
+            // que el siguiente turno reciba el historial correcto.
+            if let indice = mensajes.firstIndex(where: {
+                $0.id == mensajeUsuario.id
+            }) {
+                mensajes[indice].ambito = respuesta.ambito
+            }
+            let mensajeRespuesta = MensajeClaro(esUsuario: false,
+                                         texto: respuesta.texto,
+                                         fuente: respuesta.fuente,
+                                          ambito: respuesta.ambito)
+            mensajes.append(mensajeRespuesta)
+            guardar(mensajeRespuesta, en: conversacion)
+            actualizarMemoria(conversacion)
             pensando = false
+            solicitudActiva = nil
+            tareaRespuesta = nil
         }
+    }
+
+    private func cancelarRespuestaActiva() {
+        solicitudActiva = nil
+        tareaRespuesta?.cancel()
+        tareaRespuesta = nil
+        pensando = false
+    }
+
+    private func obtenerConversacion(primeraPregunta: String) -> ConversacionFinanciera {
+        if let conversacionActual { return conversacionActual }
+        let titulo = String(primeraPregunta.prefix(48))
+        let nueva = ConversacionFinanciera(titulo: titulo)
+        contexto.insert(nueva)
+        conversacionActual = nueva
+        return nueva
+    }
+
+    private func guardar(_ mensaje: MensajeClaro, en conversacion: ConversacionFinanciera) {
+        let guardado = MensajeFinanciero(
+            esUsuario: mensaje.esUsuario,
+            texto: mensaje.texto,
+            fuenteRaw: mensaje.fuente?.rawValue,
+            ambitoRaw: mensaje.ambito.valorPersistente,
+            conversacion: conversacion)
+        contexto.insert(guardado)
+        conversacion.actualizadaEl = .now
+        try? contexto.save()
+    }
+
+    private func cargar(reciente conversacion: ConversacionFinanciera) {
+        cancelarRespuestaActiva()
+        conversacionActual = conversacion
+        mensajes = conversacion.mensajes.sorted { $0.creadoEl < $1.creadoEl }.map {
+            MensajeClaro(esUsuario: $0.esUsuario, texto: $0.texto,
+                         fuente: $0.fuenteRaw.flatMap(FuenteRespuestaClaro.init(rawValue:)),
+                         ambito: AmbitoConsultaClaro(valorPersistente: $0.ambitoRaw))
+        }
+    }
+
+    private func nuevaConversacion() {
+        cancelarRespuestaActiva()
+        conversacionActual = nil
+        mensajes = []
+        pregunta = ""
+    }
+
+    private func actualizarMemoria(_ conversacion: ConversacionFinanciera) {
+        let ordenados = conversacion.mensajes.sorted { $0.creadoEl < $1.creadoEl }
+        guard ordenados.count > 16 else { return }
+        conversacion.resumen = ordenados.dropLast(12).suffix(12).map {
+            ($0.esUsuario ? "Usuario: " : "Claro: ") + String($0.texto.prefix(180))
+        }.joined(separator: " | ")
     }
 
     private func textoVisible(_ texto: String) -> String {
@@ -467,12 +465,50 @@ struct ClaroInteligenteView: View {
                                                    withTemplate: "$ ••••")
     }
 
-    private func iconoFuente(_ fuente: FuenteRespuestaClaro) -> String {
-        switch fuente {
-        case .qwen4B, .qwen8B: return "brain.head.profile"
-        case .appleIntelligence: return "apple.intelligence"
-        case .motorLocal: return "function"
+}
+
+private struct HistorialConversacionesClaroView: View {
+    let conversaciones: [ConversacionFinanciera]
+    let seleccionar: (ConversacionFinanciera) -> Void
+    @Environment(\.dismiss) private var cerrar
+    @Environment(\.modelContext) private var contexto
+    @State private var renombrando: ConversacionFinanciera?
+    @State private var nuevoTitulo = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if conversaciones.isEmpty {
+                    ContentUnavailableView("Sin conversaciones", systemImage: "bubble.left.and.bubble.right")
+                }
+                ForEach(conversaciones) { conversacion in
+                    Button { seleccionar(conversacion) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(conversacion.titulo).foregroundStyle(Tema.textoPrincipal)
+                            Text("\(conversacion.mensajes.count) mensajes · \(conversacion.actualizadaEl.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.caption).foregroundStyle(Tema.textoSecundario)
+                        }
+                    }
+                    .swipeActions {
+                        Button(role: .destructive) { contexto.delete(conversacion) } label: {
+                            Label("Eliminar", systemImage: "trash")
+                        }
+                        Button { renombrando = conversacion; nuevoTitulo = conversacion.titulo } label: {
+                            Label("Renombrar", systemImage: "pencil")
+                        }.tint(Tema.acento)
+                    }
+                }
+            }
+            .navigationTitle("Conversaciones")
+            .toolbar { Button("Cerrar") { cerrar() } }
+            .alert("Renombrar conversación", isPresented: Binding(
+                get: { renombrando != nil }, set: { if !$0 { renombrando = nil } })) {
+                TextField("Título", text: $nuevoTitulo)
+                Button("Guardar") { renombrando?.titulo = nuevoTitulo; renombrando = nil }
+                Button("Cancelar", role: .cancel) { renombrando = nil }
+            }
         }
+        .aparienciaDeLaApp()
     }
 }
 
@@ -481,6 +517,192 @@ private struct MensajeClaro: Identifiable {
     let esUsuario: Bool
     let texto: String
     let fuente: FuenteRespuestaClaro?
+    var ambito: AmbitoConsultaClaro
+}
+
+private struct RespuestaFinancieraFormateada: View {
+    let texto: String
+    let estructurarParrafoLargo: Bool
+
+    private var bloques: [BloqueRespuestaFinanciera] {
+        BloqueRespuestaFinanciera.interpretar(
+            texto, estructurarParrafoLargo: estructurarParrafoLargo)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(bloques) { bloque in
+                switch bloque.estilo {
+                case .titulo:
+                    textoConMarkdown(bloque.texto)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Tema.acento)
+                        .padding(.top, bloque.esPrimero ? 0 : 3)
+
+                case .destacado:
+                    textoConMarkdown(bloque.texto)
+                        .font(.body.weight(.semibold))
+
+                case .parrafo:
+                    textoConMarkdown(bloque.texto)
+                        .font(.body)
+
+                case .vineta:
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Circle()
+                            .fill(Tema.acento)
+                            .frame(width: 5, height: 5)
+                        textoConMarkdown(bloque.texto)
+                            .font(.body)
+                    }
+
+                case .numerado:
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("\(bloque.numero ?? 1).")
+                            .font(.body.weight(.bold))
+                            .foregroundStyle(Tema.acento)
+                        textoConMarkdown(bloque.texto)
+                            .font(.body)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func textoConMarkdown(_ contenido: String) -> Text {
+        let opciones = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        if let enriquecido = try? AttributedString(
+            markdown: contenido, options: opciones) {
+            return Text(enriquecido)
+        }
+        return Text(contenido)
+    }
+}
+
+private struct BloqueRespuestaFinanciera: Identifiable {
+    enum Estilo {
+        case titulo
+        case destacado
+        case parrafo
+        case vineta
+        case numerado
+    }
+
+    let id = UUID()
+    let estilo: Estilo
+    let texto: String
+    var numero: Int? = nil
+    var esPrimero = false
+
+    static func interpretar(
+        _ respuesta: String,
+        estructurarParrafoLargo: Bool) -> [Self] {
+        let lineas = respuesta
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        var bloques: [Self] = []
+        var parrafo: [String] = []
+
+        func agregarParrafo() {
+            let unido = parrafo.joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !unido.isEmpty {
+                bloques.append(Self(estilo: .parrafo, texto: unido))
+            }
+            parrafo.removeAll(keepingCapacity: true)
+        }
+
+        for lineaOriginal in lineas {
+            let linea = lineaOriginal.trimmingCharacters(in: .whitespaces)
+            guard !linea.isEmpty else {
+                agregarParrafo()
+                continue
+            }
+
+            if linea.hasPrefix("#") {
+                agregarParrafo()
+                let titulo = linea.drop(while: { $0 == "#" || $0 == " " })
+                bloques.append(Self(estilo: .titulo, texto: String(titulo)))
+                continue
+            }
+
+            if let contenido = contenidoDeVineta(linea) {
+                agregarParrafo()
+                bloques.append(Self(estilo: .vineta, texto: contenido))
+                continue
+            }
+
+            if let (numero, contenido) = contenidoNumerado(linea) {
+                agregarParrafo()
+                bloques.append(Self(estilo: .numerado, texto: contenido,
+                                    numero: numero))
+                continue
+            }
+
+            parrafo.append(linea)
+        }
+        agregarParrafo()
+
+        if estructurarParrafoLargo,
+           bloques.count == 1,
+           bloques[0].estilo == .parrafo,
+           bloques[0].texto.count > 280 {
+            bloques = acomodarParrafoLargo(bloques[0].texto)
+        }
+
+        if bloques.isEmpty {
+            bloques = [Self(estilo: .parrafo, texto: respuesta)]
+        }
+        bloques[0].esPrimero = true
+        return bloques
+    }
+
+    private static func contenidoDeVineta(_ linea: String) -> String? {
+        for prefijo in ["- ", "* ", "• "] where linea.hasPrefix(prefijo) {
+            return String(linea.dropFirst(prefijo.count))
+        }
+        return nil
+    }
+
+    private static func contenidoNumerado(_ linea: String) -> (Int, String)? {
+        guard let expresion = try? NSRegularExpression(
+            pattern: #"^(\d+)[.)]\s+(.+)$"#),
+              let coincidencia = expresion.firstMatch(
+                in: linea, range: NSRange(linea.startIndex..., in: linea)),
+              let rangoNumero = Range(coincidencia.range(at: 1), in: linea),
+              let rangoTexto = Range(coincidencia.range(at: 2), in: linea),
+              let numero = Int(linea[rangoNumero]) else { return nil }
+        return (numero, String(linea[rangoTexto]))
+    }
+
+    private static func acomodarParrafoLargo(_ texto: String) -> [Self] {
+        var frases: [String] = []
+        texto.enumerateSubstrings(
+            in: texto.startIndex..<texto.endIndex,
+            options: [.bySentences, .substringNotRequired]) { _, rango, _, _ in
+                let frase = String(texto[rango])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !frase.isEmpty { frases.append(frase) }
+            }
+        guard frases.count > 1 else {
+            return [Self(estilo: .parrafo, texto: texto)]
+        }
+
+        var resultado = [
+            Self(estilo: .titulo, texto: "Veredicto"),
+            Self(estilo: .destacado, texto: frases.removeFirst()),
+            Self(estilo: .titulo, texto: "Análisis")
+        ]
+        while !frases.isEmpty {
+            let grupo = frases.prefix(2).joined(separator: " ")
+            resultado.append(Self(estilo: .parrafo, texto: grupo))
+            frases.removeFirst(min(2, frases.count))
+        }
+        return resultado
+    }
 }
 
 #Preview {

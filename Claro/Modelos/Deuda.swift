@@ -16,15 +16,26 @@ final class Deuda {
     var montoOriginal: Double
     var fecha: Date
     var notas: String
+    /// Datos opcionales para comparar el costo real de las deudas.
+    var tasaAnual: Double? = nil
+    var cat: Double? = nil
+    var plazoMeses: Int? = nil
+    var mensualidad: Double? = nil
 
     // Abonos registrados (movimientos tipo abonoDeuda)
     @Relationship(inverse: \Movimiento.deuda)
     var abonos: [Movimiento] = []
 
-    init(acreedor: String, montoOriginal: Double, fecha: Date = .now, notas: String = "") {
+    init(acreedor: String, montoOriginal: Double, fecha: Date = .now,
+         notas: String = "", tasaAnual: Double? = nil, cat: Double? = nil,
+         plazoMeses: Int? = nil, mensualidad: Double? = nil) {
         self.acreedor = acreedor
         self.montoOriginal = montoOriginal.redondeadoAMoneda
         self.fecha = fecha
         self.notas = notas
+        self.tasaAnual = tasaAnual
+        self.cat = cat
+        self.plazoMeses = plazoMeses
+        self.mensualidad = mensualidad?.redondeadoAMoneda
     }
 }

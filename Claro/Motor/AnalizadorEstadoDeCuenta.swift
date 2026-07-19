@@ -73,6 +73,7 @@ enum AnalizadorEstadoDeCuenta {
         let texto = normalizarParaBusqueda(paginas.joined(separator: "\n"))
         return texto.contains("HEY BANCO") || texto.contains("HEYBANCO")
             || texto.contains("LIVERPOOL")
+            || texto.contains("RAPPICARD")
     }
 
     private static func esResultadoUtil(_ resultado: ResumenDetectado) -> Bool {
@@ -268,6 +269,7 @@ enum AnalizadorEstadoDeCuenta {
         let textoNormalizado = normalizarParaBusqueda(textoCompleto)
         let esHeyBanco = textoNormalizado.contains("HEY BANCO")
             || textoNormalizado.contains("HEYBANCO")
+        let esRappiCard = textoNormalizado.contains("RAPPICARD")
 
         // En Hey Banco la capa digital conserva con precisión el cuadro de
         // pago, pero sus tablas necesitan OCR. El extractor entrega ambas
@@ -306,13 +308,19 @@ enum AnalizadorEstadoDeCuenta {
             ["PAGO MINIMO", "PAGO MÍNIMO"],
             excluyendo: ["COMPRAS", "DIFERIDOS", "MESES"],
             en: textoDeResumen)
-        resultado.saldoAlCorte = esHeyBanco
-            ? montoDespuesDeClave(["SALDO DEUDOR TOTAL"], en: textoDeResumen,
-                                  maximoCaracteres: 180)
-            : montoCercaDe(
+        if esHeyBanco || esRappiCard {
+            // En RappiCard, "Saldo cargos a meses" está justo encima de
+            // "Saldo deudor total". La búsqueda por cercanía podía tomar el
+            // primero; se exige que el importe aparezca después de la etiqueta.
+            resultado.saldoAlCorte = montoDespuesDeClave(
+                ["SALDO DEUDOR TOTAL"], en: textoDeResumen,
+                maximoCaracteres: 180)
+        } else {
+            resultado.saldoAlCorte = montoCercaDe(
                 ["SALDO DEUDOR TOTAL", "SALDO ACTUAL AL CORTE", "SALDO AL CORTE",
                  "SALDO ACTUAL", "SALDO TOTAL"],
                 excluyendo: [], en: textoDeResumen)
+        }
 
         // Para fechas sin año (Liverpool escribe "03-JUL"), usamos el del corte
         let anioCorte = Calendar.current.component(.year,
@@ -379,7 +387,9 @@ enum AnalizadorEstadoDeCuenta {
                           "PAGO POR SPEI", "PAGO RECIBIDO", "GRACIAS POR SU PAGO",
                           "ABONO RECIBIDO", "TIPO DE CAMBIO"]
                 .contains { mayus.contains($0) }
-            let esCargoBancario = ["INTERESES", "IVA DE INTER", "COMISION", "COMISIÓN"]
+            let esCargoBancario = ["INTERESES", "IVA DE INTER", "IVA INTERES",
+                                   "INTERES COMPRA EN CUOTAS",
+                                   "COMISION", "COMISIÓN"]
                 .contains { mayus.contains($0) }
             let esDesgloseHey = esHeyBanco && esDesgloseDePlanHey(mayus)
             guard !esPago && !esCargoBancario && !esDesgloseHey else { continue }
@@ -880,12 +890,13 @@ enum AnalizadorEstadoDeCuenta {
         let exclusionesNormalizadas = excluyendo.map { normalizarParaBusqueda($0) }
         for indice in lineas.indices {
             let lineaNormalizada = normalizarParaBusqueda(lineas[indice])
-            let siguiente = indice + 1 < lineas.count
-                ? normalizarParaBusqueda(lineas[indice + 1]) : ""
-            let ventanaDeClave = lineaNormalizada + " " + siguiente
-            guard clavesNormalizadas.contains(where: { ventanaDeClave.contains($0) })
+            // La clave debe pertenecer a este renglón. Usar también el
+            // siguiente hacía que "Pago para no generar intereses" tomara
+            // el lugar de "Pago mínimo", o que el pago mínimo se leyera
+            // como saldo cuando las etiquetas venían una debajo de otra.
+            guard clavesNormalizadas.contains(where: { lineaNormalizada.contains($0) })
             else { continue }
-            if exclusionesNormalizadas.contains(where: { ventanaDeClave.contains($0) }) {
+            if exclusionesNormalizadas.contains(where: { lineaNormalizada.contains($0) }) {
                 continue
             }
 
@@ -991,6 +1002,7 @@ enum AnalizadorEstadoDeCuenta {
         let bancos: [(claves: [String], nombre: String)] = [
             (["HEY BANCO", "HEYBANCO"], "Hey Banco"),
             (["LIVERPOOL"], "Liverpool"),
+            (["RAPPICARD", "RAPPI CARD"], "RappiCard"),
             (["CITIBANAMEX", "BANAMEX"], "Banamex"),
             (["BBVA"], "BBVA"),
             (["BANORTE"], "Banorte"),

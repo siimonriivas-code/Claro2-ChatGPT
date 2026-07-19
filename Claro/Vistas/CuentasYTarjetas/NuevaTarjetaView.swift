@@ -22,6 +22,8 @@ struct NuevaTarjetaView: View {
     @State private var diaCorte = 15
     @State private var diaLimitePago = 5
     @State private var deudaActual: Double?
+    @State private var tasaAnual: Double?
+    @State private var cat: Double?
     @State private var colorHex = "004481"
 
     private let coloresDisponibles: [String] =
@@ -72,6 +74,10 @@ struct NuevaTarjetaView: View {
                 } footer: {
                     Text("¿Cuánto debe la tarjeta HOY en total? Este es su punto de partida; desde aquí el motor calculará la deuda con cada compra y pago (Ley 1). Si está en ceros, deja 0.")
                 }
+                Section("Costo del crédito (opcional)") {
+                    TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)
+                    TextField("CAT %", value: $cat, format: .number).keyboardType(.decimalPad)
+                }
 
                 Section {
                     LazyVGrid(columns: Array(repeating: .init(.flexible()), count: 4),
@@ -116,7 +122,8 @@ struct NuevaTarjetaView: View {
                             saldoInicial: deudaActual ?? 0,
                             fechaSaldoInicial: .now,
                             colorHex: colorHex,
-                            banco: bancoSeleccionado)
+                            banco: bancoSeleccionado,
+                            tasaAnual: tasaAnual, cat: cat)
                         contexto.insert(tarjeta)
                         cerrar()
                     }

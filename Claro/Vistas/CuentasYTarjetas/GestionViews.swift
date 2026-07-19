@@ -166,6 +166,8 @@ struct EditarTarjetaView: View {
     @State private var diaLimitePago: Int
     @State private var saldoInicial: Double?
     @State private var colorHex: String
+    @State private var tasaAnual: Double?
+    @State private var cat: Double?
 
     private let colores = ["004481", "EB0029", "820AD1", "6C8CFF",
                            "4ADE9C", "F5B14C", "FF8CC8", "1C2230"]
@@ -180,6 +182,8 @@ struct EditarTarjetaView: View {
         _diaLimitePago = State(initialValue: tarjeta.diaLimitePago)
         _saldoInicial = State(initialValue: tarjeta.saldoInicial)
         _colorHex = State(initialValue: tarjeta.colorHex)
+        _tasaAnual = State(initialValue: tarjeta.tasaAnual)
+        _cat = State(initialValue: tarjeta.cat)
     }
 
     var body: some View {
@@ -212,6 +216,10 @@ struct EditarTarjetaView: View {
                     Text("Punto de partida")
                 } footer: {
                     Text("⚠️ Cambiar la deuda inicial recalcula la deuda actual de la tarjeta (Ley 1).")
+                }
+                Section("Costo del crédito") {
+                    TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)
+                    TextField("CAT %", value: $cat, format: .number).keyboardType(.decimalPad)
                 }
                 Section("Color") {
                     LazyVGrid(columns: Array(repeating: .init(.flexible()), count: 4),
@@ -251,6 +259,8 @@ struct EditarTarjetaView: View {
                         tarjeta.diaLimitePago = diaLimitePago
                         tarjeta.saldoInicial = (saldoInicial ?? 0).redondeadoAMoneda
                         tarjeta.colorHex = colorHex
+                        tarjeta.tasaAnual = tasaAnual
+                        tarjeta.cat = cat
                         cerrar()
                     }
                     .disabled(nombre.trimmingCharacters(in: .whitespaces).isEmpty)

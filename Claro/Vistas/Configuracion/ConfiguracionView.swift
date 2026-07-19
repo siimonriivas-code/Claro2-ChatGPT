@@ -16,6 +16,8 @@ struct ConfiguracionView: View {
     @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
     @AppStorage("importarConIA") private var importarConIA = true
     @AppStorage("apariencia") private var apariencia = Apariencia.oscuro.rawValue
+    @AppStorage("modoHistoricoActivo") private var modoHistoricoActivo = false
+    @AppStorage("fechaAnalisisReferencia") private var fechaAnalisisReferencia = Date.now.timeIntervalSince1970
 
     @State private var confirmandoBorrado = false
 
@@ -63,8 +65,25 @@ struct ConfiguracionView: View {
                 } header: {
                     Text("Importación de estados de cuenta")
                 } footer: {
-                    Text("Hey Banco y Liverpool usan automáticamente el lector especializado y OCR local. En otros bancos puedes activar Apple Intelligence como apoyo.")
+                    Text("Hey Banco, Liverpool y RappiCard usan automáticamente lectores especializados y OCR local. En otros bancos puedes activar Apple Intelligence como apoyo.")
                 }
+
+                Section {
+                    Toggle("Analizar como si hoy fuera otra fecha", isOn: $modoHistoricoActivo)
+                    if modoHistoricoActivo {
+                        DatePicker("Fecha de referencia", selection: Binding(
+                            get: { Date(timeIntervalSince1970: fechaAnalisisReferencia) },
+                            set: { fechaAnalisisReferencia = $0.timeIntervalSince1970 }),
+                                   displayedComponents: .date)
+                    }
+                } header: { Text("Modo histórico o de pruebas") }
+                  footer: { Text("Afecta las proyecciones y la IA, pero no modifica las fechas ni los movimientos guardados.") }
+
+                Section {
+                    NavigationLink { IngresosRecurrentesView() } label: {
+                        Label("Ingresos habituales", systemImage: "calendar.badge.plus")
+                    }
+                } header: { Text("Planeación") }
 
                 Section {
                     NavigationLink {
