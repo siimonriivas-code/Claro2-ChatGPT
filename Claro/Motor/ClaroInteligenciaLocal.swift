@@ -73,7 +73,10 @@ enum ClaroInteligenciaLocal {
             pregunta: pregunta, resumen: resumen,
             veredictoDelMotor: respaldo, historial: historial)
 
-        if AdministradorQwen.shared.estaDescargado {
+        // Un modelo descargado pero todavía no preparado no se carga de
+        // sorpresa al enviar una pregunta. Así evitamos un pico de memoria y
+        // Apple Intelligence o las reglas pueden responder como respaldo.
+        if AdministradorQwen.shared.estaListo {
             do {
                 let texto = try await AdministradorQwen.shared.responder(
                     solicitud: solicitud,
@@ -115,7 +118,7 @@ enum ClaroInteligenciaLocal {
         historial: [TurnoConversacionClaro]) -> String {
         let qwen = AdministradorQwen.shared
         let limiteHistorial = qwen.modeloSeleccionado == .potente8B
-            && qwen.estaDescargado ? 18 : 6
+            && qwen.estaListo ? 18 : 6
         let conversacion = historial.suffix(limiteHistorial).map {
             "\($0.esUsuario ? "USUARIO" : "CLARO"): \($0.texto)"
         }.joined(separator: "\n")

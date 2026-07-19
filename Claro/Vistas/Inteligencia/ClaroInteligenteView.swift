@@ -67,7 +67,7 @@ struct ClaroInteligenteView: View {
         }
         .aparienciaDeLaApp()
         .task {
-            await qwen.prepararSiEstaDescargado()
+            await qwen.prepararAlAbrir()
         }
         .onChange(of: voz.texto) { _, texto in
             guard voz.estaEscuchando || !texto.isEmpty else { return }
@@ -156,7 +156,7 @@ struct ClaroInteligenteView: View {
                     Text(qwen.descripcionEstado)
                         .font(.caption)
                         .foregroundStyle(Tema.textoSecundario)
-                        .lineLimit(2)
+                        .lineLimit(4)
                 }
                 Spacer(minLength: 6)
                 controlQwen
@@ -196,7 +196,7 @@ struct ClaroInteligenteView: View {
         switch qwen.estado {
         case .noDescargado:
             Button("Descargar") {
-                Task { await qwen.descargarYCargar() }
+                Task { await qwen.descargar() }
             }
             .font(.caption.weight(.bold))
             .buttonStyle(.borderedProminent)
@@ -206,6 +206,14 @@ struct ClaroInteligenteView: View {
         case .descargando:
             ProgressView()
                 .tint(Tema.acento)
+
+        case .descargado:
+            Button("Preparar") {
+                Task { await qwen.prepararSiEstaDescargado() }
+            }
+            .font(.caption.weight(.bold))
+            .buttonStyle(.borderedProminent)
+            .tint(Tema.positivo)
 
         case .cargando:
             ProgressView()
@@ -226,8 +234,14 @@ struct ClaroInteligenteView: View {
             }
 
         case .error:
-            Button("Reintentar") {
-                Task { await qwen.descargarYCargar() }
+            Button(qwen.estaDescargado ? "Preparar" : "Reintentar") {
+                Task {
+                    if qwen.estaDescargado {
+                        await qwen.prepararSiEstaDescargado()
+                    } else {
+                        await qwen.descargar()
+                    }
+                }
             }
             .font(.caption.weight(.bold))
             .buttonStyle(.bordered)

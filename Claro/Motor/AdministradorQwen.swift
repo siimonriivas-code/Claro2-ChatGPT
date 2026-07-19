@@ -9,6 +9,7 @@
 import Combine
 import Foundation
 import HuggingFace
+import MLX
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
@@ -17,6 +18,7 @@ import Tokenizers
 enum EstadoModeloQwen: Equatable {
     case noDescargado
     case descargando(Double)
+    case descargado
     case cargando
     case listo
     case error(String)
@@ -31,7 +33,9 @@ enum ModeloQwen: String, CaseIterable, Identifiable {
     var modeloID: String {
         switch self {
         case .estable4B: return "Qwen/Qwen3-4B-MLX-4bit"
-        case .potente8B: return "mlx-community/Qwen3-8B-4bit"
+        // Conserva los 8.2B parámetros del modelo, pero baja el peso de los
+        // archivos para que la carga tenga margen real dentro de iOS.
+        case .potente8B: return "mlx-community/Qwen3-8B-3bit"
         }
     }
 
@@ -52,7 +56,14 @@ enum ModeloQwen: String, CaseIterable, Identifiable {
     var tamanoAproximado: String {
         switch self {
         case .estable4B: return "2.14 GB"
-        case .potente8B: return "4.62 GB"
+        case .potente8B: return "3.58 GB"
+        }
+    }
+
+    var espacioMinimoDescarga: Int64 {
+        switch self {
+        case .estable4B: return 2_700_000_000
+        case .potente8B: return 4_300_000_000
         }
     }
 
@@ -63,13 +74,11 @@ enum ModeloQwen: String, CaseIterable, Identifiable {
         }
     }
 
-    /// El 8B usa caché creciente y cuantizada en lugar de recortar la
-    /// conversación. El propio contexto nativo del modelo marca el techo.
+    /// Ambos modelos usan caché creciente y cuantizada. Asignar un máximo
+    /// aquí crea RotatingKVCache, que en MLX Swift todavía no puede
+    /// cuantizarse y fue la causa del exceso de memoria observado en el 4B.
     var maximoKV: Int? {
-        switch self {
-        case .estable4B: return 8_192
-        case .potente8B: return nil
-        }
+        nil
     }
 
     func maximoTokens(requiereRazonamiento: Bool) -> Int {
@@ -84,9 +93,9 @@ enum ModeloQwen: String, CaseIterable, Identifiable {
     var descripcionCapacidad: String {
         switch self {
         case .estable4B:
-            return "Perfil estable para respuestas rápidas"
+            return "Perfil estable · caché optimizada para este iPhone"
         case .potente8B:
-            return "Perfil máximo · hasta 8,192 tokens al razonar"
+            return "8.2B parámetros · hasta 8,192 tokens al razonar"
         }
     }
 }
@@ -95,6 +104,7 @@ struct MetricasQwen: Equatable {
     let segundos: Double
     let tokensGenerados: Int
     let temperatura: String
+    let picoMemoriaMLX: Int
 
     var tokensPorSegundo: Double {
         guard segundos > 0 else { return 0 }
@@ -105,7 +115,9 @@ struct MetricasQwen: Equatable {
         let tiempo = segundos.formatted(.number.precision(.fractionLength(1)))
         let velocidad = tokensPorSegundo.formatted(
             .number.precision(.fractionLength(1)))
-        return "Última respuesta: \(tiempo) s · \(tokensGenerados) tokens · \(velocidad) tokens/s · \(temperatura)"
+        let memoria = ByteCountFormatter.string(
+            fromByteCount: Int64(picoMemoriaMLX), countStyle: .memory)
+        return "Última respuesta: \(tiempo) s · \(tokensGenerados) tokens · \(velocidad) tokens/s · pico MLX \(memoria) · \(temperatura)"
     }
 }
 
@@ -121,18 +133,24 @@ final class AdministradorQwen: ObservableObject {
     private var operacionEnCurso = false
 
     private static let claveModeloSeleccionado = "modeloQwenSeleccionado"
+    private static let limiteCacheMLX = 32 * 1_024 * 1_024
 
     private init() {
+        // MLX conserva por defecto buffers temporales hasta un límite muy
+        // grande. En iOS esos buffers compiten con el modelo y pueden activar
+        // jetsam aunque los pesos sí hayan cabido.
+        Memory.cacheLimit = Self.limiteCacheMLX
+        Memory.clearCache()
         let valorGuardado = UserDefaults.standard.string(
             forKey: Self.claveModeloSeleccionado)
         let modelo = valorGuardado.flatMap(ModeloQwen.init(rawValue:)) ?? .estable4B
         self.modeloSeleccionado = modelo
-        let raiz = Self.directorioDelModelo(modelo)
-        self.estado = Self.contienePesos(en: raiz) ? .cargando : .noDescargado
+        self.estado = Self.snapshotCompleto(del: modelo) != nil
+            ? .descargado : .noDescargado
     }
 
     var estaDescargado: Bool {
-        Self.contienePesos(en: Self.directorioDelModelo(modeloSeleccionado))
+        Self.snapshotCompleto(del: modeloSeleccionado) != nil
     }
 
     var estaListo: Bool {
@@ -150,59 +168,74 @@ final class AdministradorQwen: ObservableObject {
         switch estado {
         case .noDescargado: return "Disponible para descargar"
         case .descargando(let avance): return "Descargando \(Int(avance * 100))%"
+        case .descargado: return "Descargado · toca Preparar para cargarlo"
         case .cargando: return "Preparando el modelo"
         case .listo: return "Listo · todo se procesa en este iPhone"
         case .error(let mensaje): return mensaje
         }
     }
 
-    /// Cambia de modelo sin descargar nada automáticamente. Si la opción ya
-    /// existe en el iPhone, la prepara; de lo contrario muestra Descargar.
+    /// Cambia de modelo sin descargarlo ni cargarlo automáticamente. Separar
+    /// esas etapas evita mantener dos modelos o buffers temporales a la vez.
     func seleccionar(_ modelo: ModeloQwen) async {
         guard !operacionEnCurso else { return }
-        guard modelo != modeloSeleccionado else {
-            await prepararSiEstaDescargado()
-            return
-        }
+        guard modelo != modeloSeleccionado else { return }
 
-        contenedor = nil
+        liberarModeloDeMemoria()
         metricasUltimaRespuesta = nil
         modeloSeleccionado = modelo
         UserDefaults.standard.set(modelo.rawValue,
                                   forKey: Self.claveModeloSeleccionado)
-        estado = estaDescargado ? .cargando : .noDescargado
-        if estaDescargado { await prepararSiEstaDescargado() }
+        estado = estaDescargado ? .descargado : .noDescargado
     }
 
     /// Descarga desde Hugging Face exclusivamente los archivos públicos del
-    /// modelo. Ningún dato de la app forma parte de esta solicitud.
-    func descargarYCargar() async {
+    /// modelo. No lo carga inmediatamente: así la memoria temporal de red se
+    /// libera antes de que el usuario pulse Preparar.
+    func descargar() async {
         guard !operacionEnCurso else { return }
         operacionEnCurso = true
+        defer { operacionEnCurso = false }
         estado = .descargando(0)
 
         do {
+            try limpiarVersionAnteriorSiCorresponde()
+            try verificarEspacioDisponible()
             let cache = HubCache(cacheDirectory:
                 Self.directorioDelModelo(modeloSeleccionado))
             let cliente = HubClient(cache: cache)
             let repo = Repo.ID(rawValue: modeloSeleccionado.modeloID)!
-            let snapshot = try await cliente.downloadSnapshot(
+            _ = try await cliente.downloadSnapshot(
                 of: repo,
                 matching: ["*.json", "*.safetensors", "*.txt", "*.model", "*.jinja"],
-                maxConcurrentDownloads: 4) { [weak self] progreso in
+                // El modelo tiene un archivo de varios GB. Una descarga a la
+                // vez reduce buffers y deja que el sistema reanude el archivo.
+                maxConcurrentDownloads: 1) { [weak self] progreso in
                     guard let self else { return }
                     let fraccion = progreso.totalUnitCount > 0
                         ? progreso.fractionCompleted : 0
                     self.estado = .descargando(min(1, max(0, fraccion)))
                 }
-            estado = .cargando
-            try await cargar(desde: snapshot)
-            estado = .listo
+            Memory.clearCache()
+            estado = .descargado
         } catch {
-            contenedor = nil
+            liberarModeloDeMemoria()
             estado = .error(Self.mensajeAmigable(error))
         }
-        operacionEnCurso = false
+    }
+
+    /// Al abrir el chat se prepara automáticamente solo el 4B, que ya fue
+    /// validado para uso cotidiano. El 8B requiere un toque explícito.
+    func prepararAlAbrir() async {
+        guard estaDescargado else {
+            estado = .noDescargado
+            return
+        }
+        if modeloSeleccionado == .estable4B {
+            await prepararSiEstaDescargado()
+        } else {
+            estado = .descargado
+        }
     }
 
     /// Al abrir el chat, carga desde disco sin hacer una nueva descarga.
@@ -218,10 +251,12 @@ final class AdministradorQwen: ObservableObject {
         operacionEnCurso = true
         estado = .cargando
         do {
+            Memory.clearCache()
             try await cargar(desde: snapshot)
+            Memory.clearCache()
             estado = .listo
         } catch {
-            contenedor = nil
+            liberarModeloDeMemoria()
             estado = .error(Self.mensajeAmigable(error))
         }
         operacionEnCurso = false
@@ -230,8 +265,10 @@ final class AdministradorQwen: ObservableObject {
     /// Entrada deliberadamente limitada a texto ya calculado por el Motor
     /// financiero. Qwen no conoce ni puede modificar SwiftData.
     func responder(solicitud: String, requiereRazonamiento: Bool) async throws -> String {
-        if contenedor == nil { await prepararSiEstaDescargado() }
         guard let contenedor else { throw ErrorQwen.modeloNoDisponible }
+
+        Memory.clearCache()
+        Memory.peakMemory = 0
 
         let parametros = GenerateParameters(
             maxTokens: modeloSeleccionado.maximoTokens(
@@ -254,10 +291,13 @@ final class AdministradorQwen: ObservableObject {
         let segundos = max(0.001, Date().timeIntervalSince(inicio))
         let tokenizador = await contenedor.tokenizer
         let cantidadTokens = tokenizador.encode(text: texto).count
+        let memoria = Memory.snapshot()
         metricasUltimaRespuesta = MetricasQwen(
             segundos: segundos,
             tokensGenerados: cantidadTokens,
-            temperatura: Self.descripcionTermica(ProcessInfo.processInfo.thermalState))
+            temperatura: Self.descripcionTermica(ProcessInfo.processInfo.thermalState),
+            picoMemoriaMLX: memoria.peakMemory)
+        Memory.clearCache()
         let limpio = Self.limpiarRazonamientoInterno(texto)
         guard !limpio.isEmpty else { throw ErrorQwen.respuestaVacia }
         return limpio
@@ -267,7 +307,7 @@ final class AdministradorQwen: ObservableObject {
     /// respaldos de Claro viven en contenedores distintos y no se tocan.
     func eliminarModelo() throws {
         guard !operacionEnCurso else { return }
-        contenedor = nil
+        liberarModeloDeMemoria()
         let objetivo = Self.directorioDelModelo(modeloSeleccionado).standardizedFileURL
         let caches = FileManager.default.urls(for: .cachesDirectory,
                                               in: .userDomainMask)[0].standardizedFileURL
@@ -291,15 +331,54 @@ final class AdministradorQwen: ObservableObject {
             using: #huggingFaceTokenizerLoader())
     }
 
-    private var directorioSnapshotActual: URL? {
+    private func liberarModeloDeMemoria() {
+        contenedor = nil
+        Memory.clearCache()
+    }
+
+    private func verificarEspacioDisponible() throws {
+        guard !estaDescargado else { return }
+        let caches = FileManager.default.urls(for: .cachesDirectory,
+                                              in: .userDomainMask)[0]
+        let valores = try? caches.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let disponible = valores?.volumeAvailableCapacityForImportantUsage,
+              disponible < modeloSeleccionado.espacioMinimoDescarga else { return }
+        throw ErrorQwen.espacioInsuficiente(
+            requerido: modeloSeleccionado.espacioMinimoDescarga,
+            disponible: disponible)
+    }
+
+    /// La primera versión de prueba apuntaba al 8B de 4 bits. Al volver a
+    /// pulsar Descargar para el perfil potente, se elimina exclusivamente
+    /// ese repositorio antiguo o incompleto; las finanzas viven fuera de aquí.
+    private func limpiarVersionAnteriorSiCorresponde() throws {
+        guard modeloSeleccionado == .potente8B,
+              Self.snapshotCompleto(del: .potente8B) == nil else { return }
         let cache = HubCache(cacheDirectory:
-            Self.directorioDelModelo(modeloSeleccionado))
-        let repo = Repo.ID(rawValue: modeloSeleccionado.modeloID)!
+            Self.directorioDelModelo(.potente8B))
+        let idAnterior = Repo.ID(rawValue: "mlx-community/Qwen3-8B-4bit")!
+        let objetivos = [
+            cache.repoDirectory(repo: idAnterior, kind: .model),
+            cache.metadataDirectory(repo: idAnterior, kind: .model)
+        ]
+        for objetivo in objetivos where FileManager.default.fileExists(atPath: objetivo.path) {
+            try FileManager.default.removeItem(at: objetivo)
+        }
+    }
+
+    private var directorioSnapshotActual: URL? {
+        Self.snapshotCompleto(del: modeloSeleccionado)
+    }
+
+    private static func snapshotCompleto(del modelo: ModeloQwen) -> URL? {
+        let cache = HubCache(cacheDirectory: directorioDelModelo(modelo))
+        let repo = Repo.ID(rawValue: modelo.modeloID)!
         guard let revision = cache.resolveRevision(repo: repo, kind: .model,
                                                    ref: "main") else { return nil }
         let candidato = cache.snapshotsDirectory(repo: repo, kind: .model)
             .appendingPathComponent(revision, isDirectory: true)
-        return FileManager.default.fileExists(atPath: candidato.path) ? candidato : nil
+        return contienePesos(en: candidato) ? candidato : nil
     }
 
     private static func directorioDelModelo(_ modelo: ModeloQwen) -> URL {
@@ -337,10 +416,13 @@ final class AdministradorQwen: ObservableObject {
     }
 
     private static func mensajeAmigable(_ error: Error) -> String {
-        if (error as NSError).domain == NSURLErrorDomain {
-            return "No pude descargar Qwen. Revisa tu conexión e inténtalo de nuevo."
+        if let errorQwen = error as? ErrorQwen {
+            return errorQwen.localizedDescription
         }
-        return "No pude preparar Qwen. Apple Intelligence seguirá disponible."
+        if (error as NSError).domain == NSURLErrorDomain {
+            return "No pude descargar Qwen. Revisa tu conexión y el espacio disponible. Detalle: \(error.localizedDescription)"
+        }
+        return "No pude preparar Qwen: \(error.localizedDescription)"
     }
 
     private static func descripcionTermica(
@@ -359,12 +441,18 @@ private enum ErrorQwen: LocalizedError {
     case modeloNoDisponible
     case respuestaVacia
     case rutaNoSegura
+    case espacioInsuficiente(requerido: Int64, disponible: Int64)
 
     var errorDescription: String? {
         switch self {
-        case .modeloNoDisponible: return "Qwen no está descargado."
+        case .modeloNoDisponible:
+            return "Qwen no está preparado. Toca Preparar e inténtalo de nuevo."
         case .respuestaVacia: return "Qwen no produjo una respuesta."
         case .rutaNoSegura: return "No se pudo verificar la carpeta del modelo."
+        case .espacioInsuficiente(let requerido, let disponible):
+            let formato = ByteCountFormatter()
+            formato.countStyle = .file
+            return "Falta espacio para descargar Qwen: necesita aproximadamente \(formato.string(fromByteCount: requerido)) y hay \(formato.string(fromByteCount: disponible)) disponibles."
         }
     }
 }
