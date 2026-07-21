@@ -565,14 +565,9 @@ enum MotorClaroInteligente {
         guard let estado = tarjeta.estadosDeCuenta
             .filter({ $0.fechaCorte <= ahora })
             .max(by: { $0.fechaCorte < $1.fechaCorte }) else { return nil }
-        // Para el corte vigente, un pago tardío sí reduce lo pendiente. El
-        // límite sirve para medir puntualidad, no para crear deuda fantasma.
-        let pagado = tarjeta.movimientos
-            .filter {
-                $0.cuentaParaCalculos && $0.tipo == .pagoTarjeta
-                    && $0.fecha >= estado.fechaCorte && $0.fecha <= ahora
-            }
-            .reduce(0) { $0 + $1.monto }
+        // Usa exactamente la misma fuente de verdad que Inicio, la tarjeta y
+        // el formulario de pago. Así la IA nunca reporta otra cifra.
+        let pagado = estado.pagadoAplicado(hasta: ahora)
         let falta = max(0, estado.pagoParaNoGenerarIntereses - pagado)
         let calendario = Calendar.current
         let hoy = calendario.startOfDay(for: ahora)

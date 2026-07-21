@@ -61,16 +61,18 @@ enum MotorDashboard {
 
         // 1. Cortes vencidos sin cubrir (lo más grave)
         for estado in tarjetas.compactMap({ $0.estadoDeCuentaVigente })
-            where estado.situacion == .vencidoSinCubrir {
+            where estado.situacion == .vencidoSinCubrir
+                || estado.situacion == .vencidoParcialmenteCubierto {
             lista.append(Insight(
                 icono: "exclamationmark.triangle.fill",
-                texto: "\(estado.tarjeta?.nombre ?? "Una tarjeta") venció sin cubrir el pago para no generar intereses. Faltan \(estado.faltaPorCubrir.comoDinero).",
+                texto: "\(estado.tarjeta?.nombre ?? "Una tarjeta") tiene un corte vencido. Faltan \(estado.faltaPorCubrir.comoDinero) después de los pagos registrados.",
                 esUrgente: true))
         }
 
         // 2. Riesgo: un pago próximo es mayor que todo tu dinero en cuentas
         for estado in pagosProximos(tarjetas: tarjetas)
             where estado.situacion != .vencidoSinCubrir
+               && estado.situacion != .vencidoParcialmenteCubierto
                && estado.faltaPorCubrir > total {
             lista.append(Insight(
                 icono: "exclamationmark.circle.fill",

@@ -219,7 +219,9 @@ struct DashboardView: View {
 
     private func panelPagoProximo(_ estado: EstadoDeCuenta) -> some View {
         let dias = estado.diasParaVencer
-        let color: Color = estado.situacion == .vencidoSinCubrir ? Tema.urgente
+        let estaVencido = estado.situacion == .vencidoSinCubrir
+            || estado.situacion == .vencidoParcialmenteCubierto
+        let color: Color = estaVencido ? Tema.urgente
                          : dias <= 3 ? Tema.urgente
                          : dias <= 7 ? Tema.advertencia
                          : Tema.positivo
@@ -235,7 +237,9 @@ struct DashboardView: View {
                         .foregroundStyle(Tema.textoSecundario)
                 }
                 Spacer()
-                Pildora(texto: dias >= 0 ? "\(dias) días" : "Vencido",
+                Pildora(texto: estado.situacion == .parcialmenteCubierto
+                         ? "Pago parcial"
+                         : dias >= 0 ? "\(dias) días" : estado.situacion.titulo,
                         color: color)
             }
         }

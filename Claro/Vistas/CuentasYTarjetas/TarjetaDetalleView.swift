@@ -362,9 +362,17 @@ struct TarjetaDetalleView: View {
 
                 filaDato("Corte", estado.fechaCorte.formatted(date: .abbreviated, time: .omitted))
                 filaDato("Fecha límite", estado.fechaLimitePago.formatted(date: .abbreviated, time: .omitted))
-                filaDato("Saldo al corte", estado.saldoAlCorte.comoDinero)
-                filaDato("Para no generar intereses", estado.pagoParaNoGenerarIntereses.comoDinero)
-                filaDato("Pagado (pagos reales)", estado.pagadoDelPeriodo.comoDinero)
+                filaDato("Saldo original del corte", estado.saldoAlCorte.comoDinero)
+                filaDato("Saldo del corte pendiente",
+                         estado.saldoDelCortePendiente.comoDinero,
+                         color: estado.saldoDelCortePendiente > 0
+                         ? Tema.advertencia : Tema.positivo)
+                filaDato("Para no generar intereses pendiente",
+                         estado.faltaPorCubrir.comoDinero,
+                         color: estado.faltaPorCubrir > 0 ? color : Tema.positivo)
+                filaDato("Pago mínimo pendiente", estado.pagoMinimoPendiente.comoDinero)
+                filaDato("Pagado y aplicado al corte", estado.pagadoDelPeriodo.comoDinero,
+                         color: estado.pagadoDelPeriodo > 0 ? Tema.positivo : nil)
 
                 if !estado.mensualidadesIncluidas.isEmpty {
                     filaDato("Mensualidades MSI incluidas",
@@ -387,7 +395,8 @@ struct TarjetaDetalleView: View {
         }
     }
 
-    private func filaDato(_ titulo: String, _ valor: String) -> some View {
+    private func filaDato(_ titulo: String, _ valor: String,
+                          color: Color? = nil) -> some View {
         HStack {
             Text(titulo)
                 .font(.footnote)
@@ -395,7 +404,8 @@ struct TarjetaDetalleView: View {
             Spacer()
             Text(valor)
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(Tema.textoPrincipal)
+                .foregroundStyle(color ?? Tema.textoPrincipal)
+                .contentTransition(.numericText())
         }
     }
 
@@ -405,6 +415,8 @@ struct TarjetaDetalleView: View {
         case .pendiente:            return (Tema.advertencia, "clock.fill")
         case .parcialmenteCubierto: return (Tema.advertencia, "circle.lefthalf.filled")
         case .vencidoSinCubrir:     return (Tema.urgente, "exclamationmark.triangle.fill")
+        case .vencidoParcialmenteCubierto:
+            return (Tema.urgente, "exclamationmark.circle.fill")
         }
     }
 

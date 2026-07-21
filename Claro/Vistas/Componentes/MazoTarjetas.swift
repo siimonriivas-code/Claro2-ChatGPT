@@ -48,7 +48,8 @@ struct MazoTarjetas: View {
             return 100_000 - t.deudaCalculada / 1_000_000
         }
         switch corte.situacion {
-        case .vencidoSinCubrir:            return -1_000
+        case .vencidoSinCubrir, .vencidoParcialmenteCubierto:
+            return -1_000
         case .pendiente, .parcialmenteCubierto:
             return Double(corte.diasParaVencer)
         case .cubierto:                    return 50_000 - t.deudaCalculada / 1_000_000

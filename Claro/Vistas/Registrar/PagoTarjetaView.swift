@@ -48,6 +48,24 @@ struct PagoTarjetaView: View {
         NavigationStack {
             Form {
                 Section("Monto del pago") {
+                    if let vigente = tarjetaSeleccionada?.estadoDeCuentaVigente {
+                        HStack {
+                            Label(vigente.situacion.titulo,
+                                  systemImage: vigente.faltaPorCubrir <= 0
+                                  ? "checkmark.circle.fill"
+                                  : "creditcard.and.123")
+                                .foregroundStyle(vigente.faltaPorCubrir <= 0
+                                                 ? Tema.positivo : Tema.advertencia)
+                            Spacer()
+                            Text(vigente.faltaPorCubrir <= 0
+                                 ? "Sin pendiente"
+                                 : "Faltan \(vigente.faltaPorCubrir.comoDinero)")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(vigente.faltaPorCubrir <= 0
+                                                 ? Tema.positivo : Tema.textoPrincipal)
+                        }
+                    }
+
                     TextField("0.00", value: $monto, format: .number)
                         .keyboardType(.decimalPad)
                         .font(.title2.weight(.bold))
@@ -130,6 +148,7 @@ struct PagoTarjetaView: View {
                             cuenta: cuentaOrigen,
                             tarjeta: tarjetaSeleccionada)
                         contexto.insert(movimiento)
+                        try? contexto.save()
                         cerrar()
                     }
                     .disabled(!puedeGuardar)

@@ -45,6 +45,9 @@ struct TarjetaVisual: View {
             return ("Al corriente", Tema.positivo)
         case .vencidoSinCubrir:
             return ("Vencida", Tema.urgente)
+        case .vencidoParcialmenteCubierto:
+            return ("Vencida · falta \(vigente.faltaPorCubrir.comoDinero)",
+                    Tema.urgente)
         case .pendiente, .parcialmenteCubierto:
             let fecha = vigente.fechaLimitePago
                 .formatted(.dateTime.day().month(.abbreviated))

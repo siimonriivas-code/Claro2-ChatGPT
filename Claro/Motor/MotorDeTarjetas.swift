@@ -54,7 +54,7 @@ extension TarjetaCredito {
 
 // MARK: - Cálculos del estado de cuenta
 
-/// Las 4 situaciones posibles de un estado de cuenta.
+/// Las situaciones posibles de un estado de cuenta.
 /// 'nonisolated': puede usarse y compararse desde cualquier contexto
 /// del nuevo sistema de concurrencia de Swift.
 nonisolated enum SituacionEstadoDeCuenta {
@@ -62,6 +62,7 @@ nonisolated enum SituacionEstadoDeCuenta {
     case parcialmenteCubierto // 🟡 pagaste algo, pero falta
     case cubierto             // 🟢 alcanzaste el pago para no generar intereses
     case vencidoSinCubrir     // 🔴 pasó la fecha límite sin cubrirlo
+    case vencidoParcialmenteCubierto // 🔴 venció, pero ya recibió un abono
 
     var titulo: String {
         switch self {
@@ -69,34 +70,60 @@ nonisolated enum SituacionEstadoDeCuenta {
         case .parcialmenteCubierto: return "Parcialmente cubierto"
         case .cubierto:             return "Cubierto"
         case .vencidoSinCubrir:     return "Vencido sin cubrir"
+        case .vencidoParcialmenteCubierto:
+            return "Vencido · pago parcial"
         }
     }
 }
 
 extension EstadoDeCuenta {
 
-    /// Suma de los PAGOS REALES de la tarjeta registrados dentro del
-    /// periodo de pago de este corte (del corte a la fecha límite).
-    /// ⚠️ Ley 2: solo pagos registrados explícitamente cuentan aquí.
-    var pagadoDelPeriodo: Double {
+    /// Suma los pagos reales que corresponden a este corte. La fecha límite
+    /// mide puntualidad, pero no impide que un pago tardío reduzca lo que
+    /// todavía falta. Si existe un corte posterior, ese corte inicia una
+    /// ventana nueva y evita contar el mismo pago dos veces en el historial.
+    func pagadoAplicado(hasta fechaReferencia: Date) -> Double {
         guard let tarjeta else { return 0 }
         let calendario = Calendar.current
         let inicio = calendario.startOfDay(for: fechaCorte)
-        // Hasta el FINAL del día de la fecha límite
-        let limite = calendario.date(byAdding: .day, value: 1,
-                                     to: calendario.startOfDay(for: fechaLimitePago)) ?? fechaLimitePago
+        let finReferencia = calendario.date(
+            byAdding: .day, value: 1,
+            to: calendario.startOfDay(for: fechaReferencia)) ?? fechaReferencia
+        let siguienteCorte = tarjeta.estadosDeCuenta
+            .filter { $0 !== self && $0.fechaCorte > fechaCorte }
+            .map(\.fechaCorte)
+            .min()
+        let finExclusivo = min(siguienteCorte ?? .distantFuture, finReferencia)
 
         return tarjeta.movimientos
             .filter { $0.cuentaParaCalculos
                    && $0.tipo == .pagoTarjeta
                    && $0.fecha >= inicio
-                   && $0.fecha < limite }
+                   && $0.fecha < finExclusivo }
             .reduce(0) { $0 + $1.monto }
+            .redondeadoAMoneda
+    }
+
+    /// Nombre conservado para las vistas existentes. Ahora representa todos
+    /// los pagos aplicados al corte, incluidos los tardíos.
+    var pagadoDelPeriodo: Double {
+        pagadoAplicado(hasta: FechaAnalisisClaro.actual)
     }
 
     /// Cuánto falta para cubrir el pago para no generar intereses.
     var faltaPorCubrir: Double {
         max(0, pagoParaNoGenerarIntereses - pagadoDelPeriodo)
+            .redondeadoAMoneda
+    }
+
+    /// Valores vivos que la interfaz debe mostrar después de cada pago. Los
+    /// importes originales del PDF se conservan como evidencia histórica.
+    var saldoDelCortePendiente: Double {
+        max(0, saldoAlCorte - pagadoDelPeriodo).redondeadoAMoneda
+    }
+
+    var pagoMinimoPendiente: Double {
+        max(0, pagoMinimo - pagadoDelPeriodo).redondeadoAMoneda
     }
 
     /// La situación actual (el semáforo).
@@ -105,16 +132,20 @@ extension EstadoDeCuenta {
             return .cubierto
         }
         if pagoParaNoGenerarIntereses == 0 { return .cubierto } // corte en ceros
-        let hoy = Calendar.current.startOfDay(for: .now)
+        let hoy = Calendar.current.startOfDay(for: FechaAnalisisClaro.actual)
         let limite = Calendar.current.startOfDay(for: fechaLimitePago)
-        if hoy > limite { return .vencidoSinCubrir }
+        if hoy > limite {
+            return pagadoDelPeriodo > 0
+                ? .vencidoParcialmenteCubierto
+                : .vencidoSinCubrir
+        }
         return pagadoDelPeriodo > 0 ? .parcialmenteCubierto : .pendiente
     }
 
     /// Días que faltan para la fecha límite (negativo si ya pasó).
     var diasParaVencer: Int {
         let calendario = Calendar.current
-        let hoy = calendario.startOfDay(for: .now)
+        let hoy = calendario.startOfDay(for: FechaAnalisisClaro.actual)
         let limite = calendario.startOfDay(for: fechaLimitePago)
         return calendario.dateComponents([.day], from: hoy, to: limite).day ?? 0
     }
