@@ -27,13 +27,44 @@ extension Persona {
             .reduce(0) { $0 + $1.monto }
     }
 
-    /// Suma de los cobros que te ha pagado (movimientos activos).
-    var totalQueTeHaPagado: Double {
+    /// Parte de sus depósitos que se aplicó a compras compartidas.
+    var totalAplicadoADeuda: Double {
         movimientos
             .filter { $0.cuentaParaCalculos && $0.tipo == .cobroRecibido }
             .reduce(0) { $0 + $1.monto }
     }
 
+    /// Dinero adicional recibido de esta persona y registrado como ingreso.
+    var totalExcedenteRecibido: Double {
+        movimientos
+            .filter { $0.cuentaParaCalculos && $0.tipo == .ingreso }
+            .reduce(0) { $0 + $1.monto }
+    }
+
+    /// Todo lo recibido de la persona: deuda liquidada más excedentes.
+    var totalQueTeHaPagado: Double {
+        totalAplicadoADeuda + totalExcedenteRecibido
+    }
+
     /// Lo que le falta pagarte HOY.
-    var saldoPendiente: Double { totalQueTeDebe - totalQueTeHaPagado }
+    var saldoPendiente: Double {
+        max(0, totalQueTeDebe - totalAplicadoADeuda)
+    }
+}
+
+struct DistribucionCobroPersona: Equatable {
+    let aplicadoADeuda: Double
+    let excedenteComoIngreso: Double
+}
+
+enum MotorDePersonas {
+    static func distribuirCobro(monto: Double,
+                                saldoPendiente: Double) -> DistribucionCobroPersona {
+        let total = max(0, monto).redondeadoAMoneda
+        let pendiente = max(0, saldoPendiente).redondeadoAMoneda
+        let aplicado = min(total, pendiente).redondeadoAMoneda
+        return DistribucionCobroPersona(
+            aplicadoADeuda: aplicado,
+            excedenteComoIngreso: max(0, total - aplicado).redondeadoAMoneda)
+    }
 }

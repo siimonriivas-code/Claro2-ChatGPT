@@ -27,9 +27,12 @@ struct PersonaDetalleView: View {
                     > ($1.compra?.movimiento?.fecha ?? .distantPast) }
     }
 
-    private var cobros: [Movimiento] {
+    private var cobrosEIngresos: [Movimiento] {
         persona.movimientos
-            .filter { $0.cuentaParaCalculos && $0.tipo == .cobroRecibido }
+            .filter {
+                $0.cuentaParaCalculos
+                    && ($0.tipo == .cobroRecibido || $0.tipo == .ingreso)
+            }
             .sorted { $0.fecha > $1.fecha }
     }
 
@@ -45,9 +48,15 @@ struct PersonaDetalleView: View {
                             .font(.system(size: 34, weight: .bold, design: .rounded))
                             .foregroundStyle(persona.saldoPendiente > 0
                                              ? Tema.advertencia : Tema.positivo)
-                        Text("De \(persona.totalQueTeDebe.comoDinero) en compras, te ha pagado \(persona.totalQueTeHaPagado.comoDinero)")
+                        Text("De \(persona.totalQueTeDebe.comoDinero) en compras, se aplicaron \(persona.totalAplicadoADeuda.comoDinero)")
                             .font(.caption)
                             .foregroundStyle(Tema.textoSecundario)
+                        if persona.totalExcedenteRecibido > 0 {
+                            Label("Además recibiste \(persona.totalExcedenteRecibido.comoDinero) como ingreso excedente.",
+                                  systemImage: "plus.circle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Tema.acento)
+                        }
                     }
                 }
 
@@ -131,8 +140,8 @@ struct PersonaDetalleView: View {
                     }
                 }
 
-                TituloSeccion(texto: "Pagos que te ha hecho")
-                if cobros.isEmpty {
+                TituloSeccion(texto: "Pagos e ingresos recibidos")
+                if cobrosEIngresos.isEmpty {
                     Panel {
                         Text("Aún no registras pagos de esta persona.")
                             .font(.footnote)
@@ -143,9 +152,9 @@ struct PersonaDetalleView: View {
                 } else {
                     Panel {
                         VStack(spacing: 0) {
-                            ForEach(cobros) { cobro in
+                            ForEach(cobrosEIngresos) { cobro in
                                 FilaMovimiento(movimiento: cobro)
-                                if cobro.id != cobros.last?.id {
+                                if cobro.id != cobrosEIngresos.last?.id {
                                     Divider().overlay(Tema.panelElevado)
                                 }
                             }

@@ -33,6 +33,14 @@ struct CobroRecibidoView: View {
         (monto ?? 0) > 0 && personaSeleccionada != nil
     }
 
+    private var distribucion: DistribucionCobroPersona? {
+        guard let persona = personaSeleccionada, let monto, monto > 0 else {
+            return nil
+        }
+        return MotorDePersonas.distribuirCobro(
+            monto: monto, saldoPendiente: persona.saldoPendiente)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -74,12 +82,24 @@ struct CobroRecibidoView: View {
                     TextField("Descripción (opcional)", text: $detalle)
                 }
 
-                if let p = personaSeleccionada, let m = monto, m > p.saldoPendiente {
-                    Section {
-                        Label("Estás registrando más (\(m.comoDinero)) de lo que \(p.nombre) te debe (\(max(0, p.saldoPendiente).comoDinero)). Puedes continuar, pero revísalo.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(Tema.advertencia)
+                if let persona = personaSeleccionada, let distribucion {
+                    Section("Cómo se registrará") {
+                        if distribucion.aplicadoADeuda > 0 {
+                            LabeledContent("Aplicado a lo que te debe") {
+                                Text(distribucion.aplicadoADeuda.comoDinero)
+                                    .foregroundStyle(Tema.positivo)
+                            }
+                        }
+                        if distribucion.excedenteComoIngreso > 0 {
+                            LabeledContent("Excedente como ingreso") {
+                                Text(distribucion.excedenteComoIngreso.comoDinero)
+                                    .foregroundStyle(Tema.acento)
+                            }
+                            Label("El depósito completo entra a tu cuenta. El excedente de \(persona.nombre) cuenta como ingreso y no crea una deuda a su favor.",
+                                  systemImage: "info.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(Tema.textoSecundario)
+                        }
                     }
                 }
             }
@@ -93,20 +113,44 @@ struct CobroRecibidoView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
-                        let movimiento = Movimiento(
-                            tipo: .cobroRecibido,
-                            monto: monto ?? 0,
-                            fecha: fecha,
-                            detalle: detalle.trimmingCharacters(in: .whitespaces),
-                            cuenta: cuentaDestino,
-                            persona: personaSeleccionada)
-                        contexto.insert(movimiento)
-                        cerrar()
+                        guardarCobro()
                     }
                     .disabled(!puedeGuardar)
                 }
             }
         }
         .aparienciaDeLaApp()
+    }
+
+    private func guardarCobro() {
+        guard let persona = personaSeleccionada,
+              let distribucion else { return }
+        let descripcion = detalle.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if distribucion.aplicadoADeuda > 0 {
+            contexto.insert(Movimiento(
+                tipo: .cobroRecibido,
+                monto: distribucion.aplicadoADeuda,
+                fecha: fecha,
+                detalle: descripcion,
+                cuenta: cuentaDestino,
+                persona: persona))
+        }
+
+        if distribucion.excedenteComoIngreso > 0 {
+            let concepto = descripcion.isEmpty
+                ? "Excedente recibido de \(persona.nombre)"
+                : "\(descripcion) · excedente"
+            contexto.insert(Movimiento(
+                tipo: .ingreso,
+                monto: distribucion.excedenteComoIngreso,
+                fecha: fecha,
+                detalle: concepto,
+                cuenta: cuentaDestino,
+                persona: persona))
+        }
+
+        try? contexto.save()
+        cerrar()
     }
 }

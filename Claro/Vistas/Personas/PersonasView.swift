@@ -19,8 +19,8 @@ struct PersonasView: View {
         personas.reduce(0) { $0 + max(0, $1.saldoPendiente) }
     }
 
-    private var totalTuDebes: Double {
-        personas.reduce(0) { $0 + max(0, -$1.saldoPendiente) }
+    private var totalExcedentes: Double {
+        personas.reduce(0) { $0 + $1.totalExcedenteRecibido }
     }
 
     var body: some View {
@@ -43,13 +43,13 @@ struct PersonasView: View {
                             }
                             Panel {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("TÚ DEBES")
+                                    Text("EXCEDENTES")
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(Tema.textoSecundario)
-                                    Text(totalTuDebes.comoDinero)
+                                    Text(totalExcedentes.comoDinero)
                                         .font(.system(.title3, design: .rounded).weight(.bold))
-                                        .foregroundStyle(totalTuDebes > 0
-                                                         ? Tema.advertencia : Tema.positivo)
+                                        .foregroundStyle(totalExcedentes > 0
+                                                         ? Tema.acento : Tema.positivo)
                                 }
                             }
                         }
@@ -116,20 +116,32 @@ struct PersonasView: View {
                     Text(persona.nombre)
                         .font(.headline)
                         .foregroundStyle(Tema.textoPrincipal)
-                    if persona.saldoPendiente == 0 {
+                    if persona.saldoPendiente == 0 && persona.totalExcedenteRecibido == 0 {
                         Text("Al corriente ✓")
                             .font(.caption)
                             .foregroundStyle(Tema.positivo)
+                    } else if persona.saldoPendiente == 0 {
+                        Text("Ingreso adicional recibido")
+                            .font(.caption)
+                            .foregroundStyle(Tema.textoSecundario)
                     }
                 }
                 Spacer()
-                if persona.saldoPendiente != 0 {
+                if persona.saldoPendiente > 0 {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(abs(persona.saldoPendiente).comoDinero)
+                        Text(persona.saldoPendiente.comoDinero)
                             .font(.system(.body, design: .rounded).weight(.bold))
-                            .foregroundStyle(persona.saldoPendiente > 0
-                                             ? Tema.acento : Tema.advertencia)
-                        Text(persona.saldoPendiente > 0 ? "te debe" : "le debes")
+                            .foregroundStyle(Tema.acento)
+                        Text("te debe")
+                            .font(.caption2)
+                            .foregroundStyle(Tema.textoSecundario)
+                    }
+                } else if persona.totalExcedenteRecibido > 0 {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(persona.totalExcedenteRecibido.comoDinero)
+                            .font(.system(.body, design: .rounded).weight(.bold))
+                            .foregroundStyle(Tema.acento)
+                        Text("excedente")
                             .font(.caption2)
                             .foregroundStyle(Tema.textoSecundario)
                     }
