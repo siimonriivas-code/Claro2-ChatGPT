@@ -37,6 +37,8 @@ struct RespaldoView: View {
     @State private var importando = false
     @State private var documento: DocumentoRespaldoClaro?
     @State private var respaldoPendiente: RespaldoClaro?
+    @State private var puntosRecuperacion: [PuntoRecuperacionClaro] = []
+    @State private var puntoPendiente: PuntoRecuperacionClaro?
     @State private var mensaje: String?
     @State private var esError = false
 
@@ -58,6 +60,41 @@ struct RespaldoView: View {
                 Text("Tus datos")
             } footer: {
                 Text("Incluye bancos, cuentas, tarjetas, movimientos, personas, MSI, deudas, categorías y preferencias. Los estados de cuenta PDF no se copian.")
+            }
+
+            Section {
+                if puntosRecuperacion.isEmpty {
+                    Text("Los puntos de recuperación aparecerán aquí antes de importaciones, pagos y otros cambios importantes.")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.textoSecundario)
+                } else {
+                    ForEach(puntosRecuperacion) { punto in
+                        Button {
+                            puntoPendiente = punto
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .foregroundStyle(Tema.positivo)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(punto.motivo)
+                                        .foregroundStyle(Tema.textoPrincipal)
+                                        .lineLimit(2)
+                                    Text("\(punto.creadoEl.formatted(date: .abbreviated, time: .shortened)) · \(punto.totalRegistros) registros")
+                                        .font(.caption)
+                                        .foregroundStyle(Tema.textoSecundario)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Tema.textoSecundario)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Recuperación automática")
+            } footer: {
+                Text("Claro conserva hasta 12 puntos cifrados dentro de este iPhone. Restaurar siempre crea primero una copia del estado actual.")
             }
 
             Section {
@@ -84,6 +121,7 @@ struct RespaldoView: View {
         .scrollContentBackground(.hidden)
         .background(Tema.fondo.ignoresSafeArea())
         .navigationTitle("Respaldo")
+        .onAppear { cargarPuntos() }
         .fileExporter(isPresented: $exportando,
                       document: documento,
                       contentType: .respaldoClaro,
@@ -110,6 +148,20 @@ struct RespaldoView: View {
             Button("Cancelar", role: .cancel) { respaldoPendiente = nil }
         } message: { respaldo in
             Text("Respaldo del \(respaldo.creadoEl.formatted(date: .abbreviated, time: .shortened)), con \(respaldo.totalRegistros) registros. Se reemplazarán los datos actuales de Claro.")
+        }
+        .confirmationDialog("¿Volver a este punto?",
+                            isPresented: Binding(
+                                get: { puntoPendiente != nil },
+                                set: { if !$0 { puntoPendiente = nil } }
+                            ),
+                            titleVisibility: .visible,
+                            presenting: puntoPendiente) { punto in
+            Button("Restaurar este punto", role: .destructive) {
+                restaurar(punto)
+            }
+            Button("Cancelar", role: .cancel) { puntoPendiente = nil }
+        } message: { punto in
+            Text("\(punto.motivo), guardado el \(punto.creadoEl.formatted(date: .abbreviated, time: .shortened)), con \(punto.totalRegistros) registros.")
         }
     }
 
@@ -150,12 +202,46 @@ struct RespaldoView: View {
     private func restaurar(_ respaldo: RespaldoClaro) {
         defer { respaldoPendiente = nil }
         do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de restaurar un respaldo manual"
+            )
             try AdministradorRespaldos.restaurar(respaldo, contexto: contexto)
+            CoordinadorOperacionesClaro.actualizarServicios(contexto: contexto)
+            cargarPuntos()
             mensaje = "Respaldo restaurado correctamente."
             esError = false
         } catch {
             contexto.rollback()
             mostrarError("No se pudo restaurar. Se conservaron los datos anteriores.")
+        }
+    }
+
+    private func restaurar(_ punto: PuntoRecuperacionClaro) {
+        defer { puntoPendiente = nil }
+        do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de volver a un punto de recuperación"
+            )
+            let respaldo = try AdministradorProteccionDatos.cargar(punto)
+            try AdministradorRespaldos.restaurar(respaldo, contexto: contexto)
+            CoordinadorOperacionesClaro.actualizarServicios(contexto: contexto)
+            cargarPuntos()
+            mensaje = "Punto de recuperación restaurado correctamente."
+            esError = false
+        } catch {
+            contexto.rollback()
+            mostrarError("No se pudo restaurar. Se conservaron los datos anteriores.")
+        }
+    }
+
+    private func cargarPuntos() {
+        do {
+            puntosRecuperacion = try AdministradorProteccionDatos.listarPuntos()
+        } catch {
+            puntosRecuperacion = []
+            mostrarError("No se pudo consultar el historial de recuperación.")
         }
     }
 

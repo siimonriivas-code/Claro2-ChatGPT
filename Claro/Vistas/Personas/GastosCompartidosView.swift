@@ -124,7 +124,7 @@ private struct NuevoGrupoGastosView: View {
                         contexto.insert(GrupoGastosCompartidos(
                             nombre: nombre.trimmingCharacters(in: .whitespacesAndNewlines),
                             fecha: fecha))
-                        try? contexto.save()
+                        try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
                         cerrar()
                     }
                     .disabled(nombre.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -237,7 +237,7 @@ private struct GrupoGastosDetalleView: View {
                         .contextMenu {
                             Button(role: .destructive) {
                                 contexto.delete(gasto)
-                                try? contexto.save()
+                                try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
                             } label: {
                                 Label("Eliminar gasto", systemImage: "trash")
                             }
@@ -287,7 +287,7 @@ private struct GrupoGastosDetalleView: View {
                             isPresented: $confirmandoEliminar) {
             Button("Eliminar grupo y sus gastos", role: .destructive) {
                 contexto.delete(grupo)
-                try? contexto.save()
+                try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
                 cerrar()
             }
             Button("Cancelar", role: .cancel) { }
@@ -364,7 +364,7 @@ private struct NuevaLiquidacionGastoView: View {
             receptor: receptorEsUsuario ? nil : receptor,
             receptorNombreGuardado: receptorEsUsuario ? "Tú" : (receptor?.nombre ?? "Persona"),
             grupo: grupo))
-        try? contexto.save(); cerrar()
+        try? CoordinadorOperacionesClaro.guardar(contexto: contexto); cerrar()
     }
 }
 
@@ -553,7 +553,7 @@ private struct NuevoGastoCompartidoView: View {
                 personaNombreGuardado: destino.nombre,
                 gasto: gasto))
         }
-        try? contexto.save()
+        try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
         cerrar()
     }
 }

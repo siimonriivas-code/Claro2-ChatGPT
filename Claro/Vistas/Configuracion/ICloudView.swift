@@ -15,6 +15,7 @@ struct ICloudView: View {
     @State private var trabajando = false
     @State private var mensaje: String?
     @State private var respaldoDescargado: RespaldoClaro?
+    @State private var generaciones: [PuntoRespaldoICloud] = []
     @State private var confirmandoRestauracion = false
 
     var body: some View {
@@ -48,6 +49,32 @@ struct ICloudView: View {
                 Text("Restaurar reemplaza los datos de este iPhone. La app siempre pide confirmación antes de hacerlo.")
             }
 
+            if !generaciones.isEmpty {
+                Section("Versiones anteriores") {
+                    ForEach(generaciones) { punto in
+                        Button {
+                            prepararRestauracion(punto)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(punto.creadoEl.formatted(
+                                        date: .abbreviated,
+                                        time: .shortened
+                                    ))
+                                    Text("\(punto.totalRegistros) registros")
+                                        .font(.caption)
+                                        .foregroundStyle(Tema.textoSecundario)
+                                }
+                                Spacer()
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .foregroundStyle(Tema.positivo)
+                            }
+                        }
+                        .disabled(trabajando)
+                    }
+                }
+            }
+
             if let mensaje {
                 Section {
                     Label(mensaje, systemImage: "info.circle.fill")
@@ -59,7 +86,10 @@ struct ICloudView: View {
         .background(Tema.fondo.ignoresSafeArea())
         .navigationTitle("iCloud")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await comprobarEstado() }
+        .task {
+            await comprobarEstado()
+            await cargarGeneraciones()
+        }
         .confirmationDialog(
             "¿Restaurar este respaldo?",
             isPresented: $confirmandoRestauracion,
@@ -103,9 +133,11 @@ struct ICloudView: View {
         Task {
             do {
                 let fecha = try await AdministradorICloud.respaldar(
-                    contexto: contexto)
+                    contexto: contexto,
+                    permitirReduccion: true)
                 estado = "Último respaldo: \(fecha.formatted(date: .abbreviated, time: .shortened))"
                 mensaje = "Tus datos quedaron respaldados en tu iCloud privado."
+                await cargarGeneraciones()
             } catch {
                 mensaje = error.localizedDescription
             }
@@ -128,12 +160,36 @@ struct ICloudView: View {
         }
     }
 
+    private func prepararRestauracion(_ punto: PuntoRespaldoICloud) {
+        trabajando = true
+        mensaje = nil
+        Task {
+            do {
+                respaldoDescargado = try await AdministradorICloud
+                    .descargar(punto)
+                confirmandoRestauracion = true
+            } catch {
+                mensaje = error.localizedDescription
+            }
+            trabajando = false
+        }
+    }
+
+    private func cargarGeneraciones() async {
+        generaciones = (try? await AdministradorICloud.listarGeneraciones()) ?? []
+    }
+
     private func restaurar() {
         guard let respaldoDescargado else { return }
         trabajando = true
         do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de restaurar desde iCloud"
+            )
             try AdministradorRespaldos.restaurar(respaldoDescargado,
                                                   contexto: contexto)
+            CoordinadorOperacionesClaro.actualizarServicios(contexto: contexto)
             mensaje = "Respaldo restaurado correctamente."
         } catch {
             mensaje = "No se pudo restaurar: \(error.localizedDescription)"

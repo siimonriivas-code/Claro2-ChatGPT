@@ -22,10 +22,6 @@ struct ImportarEstadoView: View {
 
     @Query(sort: \Categoria.nombre) private var categorias: [Categoria]
     @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
-    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }, sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
-    @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
-    @AppStorage("respaldoICloudAutomatico") private var respaldoICloudAutomatico = true
-
     enum Paso { case inicio, analizando, revision }
     @State private var paso: Paso = .inicio
     @State private var mensajeError: String?
@@ -722,6 +718,15 @@ struct ImportarEstadoView: View {
 
     private func importarTodo() {
         guard puedeImportar else { return }
+        do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de importar el estado de \(tarjeta.nombre)"
+            )
+        } catch {
+            mensajeError = "No se pudo crear el punto de recuperación. La importación no modificó tus datos."
+            return
+        }
         let loteID = UUID()
 
         // Regla de continuidad: antes de introducir el corte nuevo, todos
@@ -783,17 +788,7 @@ struct ImportarEstadoView: View {
         }
 
         do {
-            try contexto.save()
-            if notificacionesActivadas {
-                ProgramadorDeNotificaciones.reprogramar(
-                    tarjetas: tarjetas, personas: personas)
-            }
-            if respaldoICloudAutomatico {
-                Task {
-                    await AdministradorICloud.respaldarSiCorresponde(
-                        contexto: contexto, intervaloMinimo: 0)
-                }
-            }
+            try CoordinadorOperacionesClaro.guardar(contexto: contexto)
             cerrar()
         } catch {
             contexto.rollback()

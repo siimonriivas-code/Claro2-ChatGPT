@@ -84,7 +84,10 @@ struct ComprobarSaldoCuentaView: View {
             saldoCalculadoAlImportar: crearAjuste ? saldoBanco : saldoClaro,
             movimientosImportados: crearAjuste && abs(diferencia) >= 0.01 ? 1 : 0,
             importacionID: id))
-        do { try contexto.save(); cerrar() }
+        do {
+            try CoordinadorOperacionesClaro.guardar(contexto: contexto)
+            cerrar()
+        }
         catch { self.error = "Claro no pudo conservar la comprobación: \(error.localizedDescription)" }
     }
 }
@@ -176,6 +179,15 @@ struct ImportarEstadoDebitoView: View {
 
     private func importar() {
         guard let resultado else { return }
+        do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de importar movimientos de \(cuenta.nombre)"
+            )
+        } catch {
+            self.error = "No se pudo crear el punto de recuperación. La importación no modificó tus datos."
+            return
+        }
         let id = UUID()
         let elegidos = resultado.movimientos.filter(\.seleccionado)
         let saldoAntes = cuenta.saldoCalculado
@@ -194,6 +206,12 @@ struct ImportarEstadoDebitoView: View {
             saldoInicialReportado: resultado.saldoInicial, saldoFinalReportado: resultado.saldoFinal,
             saldoCalculadoAlImportar: saldoTrasImportar,
             movimientosImportados: elegidos.count, importacionID: id))
-        try? contexto.save(); cerrar()
+        do {
+            try CoordinadorOperacionesClaro.guardar(contexto: contexto)
+            cerrar()
+        } catch {
+            contexto.rollback()
+            self.error = "No se pudo guardar la importación. Tus datos se conservaron."
+        }
     }
 }

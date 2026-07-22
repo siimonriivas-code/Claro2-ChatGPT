@@ -329,7 +329,7 @@ struct DeudaDetalleView: View {
 
     private func archivarDeuda() {
         deuda.archivada = true
-        try? contexto.save()
+        try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
         cerrar()
     }
 }

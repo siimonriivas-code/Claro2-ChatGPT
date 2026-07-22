@@ -18,10 +18,6 @@ struct PagoTarjetaView: View {
 
     @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }, sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
     @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
-    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
-    @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
-    @AppStorage("respaldoICloudAutomatico") private var respaldoICloudAutomatico = true
-
     @State private var monto: Double?
     @State private var tarjetaSeleccionada: TarjetaCredito?
     @State private var cuentaOrigen: CuentaBancaria?
@@ -160,32 +156,26 @@ struct PagoTarjetaView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
-                        let movimiento = Movimiento(
-                            tipo: .pagoTarjeta,
-                            monto: monto ?? 0,
-                            fecha: fecha,
-                            detalle: detalle.trimmingCharacters(in: .whitespaces),
-                            cuenta: cuentaOrigen,
-                            tarjeta: tarjetaSeleccionada)
-                        movimiento.fechaCorteObjetivoPago = (estadoObjetivo
-                            ?? cortesPendientes.first
-                            ?? tarjetaSeleccionada?.estadoDeCuentaVigente)?.fechaCorte
-                        contexto.insert(movimiento)
                         do {
-                            try contexto.save()
-                            if notificacionesActivadas {
-                                ProgramadorDeNotificaciones.reprogramar(
-                                    tarjetas: tarjetas, personas: personas)
-                            }
-                            if respaldoICloudAutomatico {
-                                Task {
-                                    await AdministradorICloud.respaldarSiCorresponde(
-                                        contexto: contexto, intervaloMinimo: 0)
-                                }
-                            }
+                            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                                contexto: contexto,
+                                motivo: "Antes de registrar un pago de tarjeta"
+                            )
+                            let movimiento = Movimiento(
+                                tipo: .pagoTarjeta,
+                                monto: monto ?? 0,
+                                fecha: fecha,
+                                detalle: detalle.trimmingCharacters(in: .whitespaces),
+                                cuenta: cuentaOrigen,
+                                tarjeta: tarjetaSeleccionada)
+                            movimiento.fechaCorteObjetivoPago = (estadoObjetivo
+                                ?? cortesPendientes.first
+                                ?? tarjetaSeleccionada?.estadoDeCuentaVigente)?.fechaCorte
+                            contexto.insert(movimiento)
+                            try CoordinadorOperacionesClaro.guardar(contexto: contexto)
                             cerrar()
                         } catch {
-                            contexto.delete(movimiento)
+                            contexto.rollback()
                             errorGuardado = "El pago no se guardó: \(error.localizedDescription)"
                         }
                     }

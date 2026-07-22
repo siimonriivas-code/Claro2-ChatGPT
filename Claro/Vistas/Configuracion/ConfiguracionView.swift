@@ -21,6 +21,7 @@ struct ConfiguracionView: View {
     @AppStorage("fechaAnalisisReferencia") private var fechaAnalisisReferencia = Date.now.timeIntervalSince1970
 
     @State private var confirmandoBorrado = false
+    @State private var errorBorrado: String?
 
     @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }) private var tarjetas: [TarjetaCredito]
     @Query(filter: #Predicate<Persona> { !$0.archivada }) private var personas: [Persona]
@@ -144,8 +145,13 @@ struct ConfiguracionView: View {
                 }
                 Button("No", role: .cancel) { }
             } message: {
-                Text("Se eliminará todo tu registro financiero de este iPhone. Solo podrás recuperarlo si antes creaste un respaldo.")
+                Text("Claro creará automáticamente un punto de recuperación antes de eliminar el registro financiero de este iPhone.")
             }
+            .alert("No se pudieron borrar los datos", isPresented: Binding(
+                get: { errorBorrado != nil },
+                set: { if !$0 { errorBorrado = nil } })) {
+                    Button("Entendido", role: .cancel) { }
+                } message: { Text(errorBorrado ?? "") }
         }
         .aparienciaDeLaApp()
     }
@@ -153,8 +159,17 @@ struct ConfiguracionView: View {
     /// Borra TODO en orden seguro (hijos primero, padres después)
     /// y vuelve a sembrar las categorías de fábrica.
     private func borrarTodo() {
-        try? AdministradorDatos.borrarTodo(contexto: contexto,
-                                           restaurarCategorias: true)
+        do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de borrar todos los datos"
+            )
+            try AdministradorDatos.borrarTodo(contexto: contexto,
+                                               restaurarCategorias: true)
+        } catch {
+            contexto.rollback()
+            errorBorrado = "No se realizó el borrado porque no fue posible proteger o eliminar la información de forma segura."
+        }
     }
 
 }
@@ -215,7 +230,9 @@ private struct ElementosArchivadosView: View {
                         Spacer()
                         Button("Restaurar") {
                             restaurar(elemento)
-                            try? contexto.save()
+                            try? CoordinadorOperacionesClaro.guardar(
+                                contexto: contexto
+                            )
                         }
                         .buttonStyle(.borderless)
                     }

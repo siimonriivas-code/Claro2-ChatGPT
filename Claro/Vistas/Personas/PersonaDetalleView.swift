@@ -208,7 +208,7 @@ struct PersonaDetalleView: View {
 
     private func archivarPersona() {
         persona.archivada = true
-        try? contexto.save()
+        try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
         cerrar()
     }
 

@@ -306,7 +306,7 @@ struct TarjetaDetalleView: View {
 
     private func archivarTarjeta() {
         tarjeta.archivada = true
-        try? contexto.save()
+        try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
         cerrar()
     }
 

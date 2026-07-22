@@ -85,6 +85,9 @@ struct RaizView: View {
         .task {
             MigradorDatosClaro.ejecutarSiHaceFalta(contexto: contexto)
             Sembrador.sembrarSiHaceFalta(contexto: contexto)
+            _ = try? AdministradorProteccionDatos.crearPuntoSiCorresponde(
+                contexto: contexto
+            )
             if !onboardingCompletado && bancos.isEmpty
                 && cuentas.isEmpty && tarjetas.isEmpty {
                 mostrandoBienvenida = true

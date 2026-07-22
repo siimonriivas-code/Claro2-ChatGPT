@@ -17,15 +17,12 @@ struct CobroRecibidoView: View {
 
     @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
     @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
-    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }) private var tarjetas: [TarjetaCredito]
-    @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
-    @AppStorage("respaldoICloudAutomatico") private var respaldoICloudAutomatico = true
-
     @State private var monto: Double?
     @State private var personaSeleccionada: Persona?
     @State private var cuentaDestino: CuentaBancaria?
     @State private var fecha: Date = .now
     @State private var detalle = ""
+    @State private var errorGuardado: String?
 
     init(personaInicial: Persona? = nil) {
         self.personaInicial = personaInicial
@@ -123,6 +120,11 @@ struct CobroRecibidoView: View {
             }
         }
         .aparienciaDeLaApp()
+        .alert("No se pudo registrar el cobro", isPresented: Binding(
+            get: { errorGuardado != nil },
+            set: { if !$0 { errorGuardado = nil } })) {
+                Button("Entendido", role: .cancel) { }
+            } message: { Text(errorGuardado ?? "") }
     }
 
     private func guardarCobro() {
@@ -130,40 +132,38 @@ struct CobroRecibidoView: View {
               let distribucion else { return }
         let descripcion = detalle.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if distribucion.aplicadoADeuda > 0 {
-            contexto.insert(Movimiento(
-                tipo: .cobroRecibido,
-                monto: distribucion.aplicadoADeuda,
-                fecha: fecha,
-                detalle: descripcion,
-                cuenta: cuentaDestino,
-                persona: persona))
-        }
-
-        if distribucion.excedenteComoIngreso > 0 {
-            let concepto = descripcion.isEmpty
-                ? "Excedente recibido de \(persona.nombre)"
-                : "\(descripcion) · excedente"
-            contexto.insert(Movimiento(
-                tipo: .ingreso,
-                monto: distribucion.excedenteComoIngreso,
-                fecha: fecha,
-                detalle: concepto,
-                cuenta: cuentaDestino,
-                persona: persona))
-        }
-
-        try? contexto.save()
-        if notificacionesActivadas {
-            ProgramadorDeNotificaciones.reprogramar(tarjetas: tarjetas,
-                                                     personas: personas)
-        }
-        if respaldoICloudAutomatico {
-            Task {
-                await AdministradorICloud.respaldarSiCorresponde(
-                    contexto: contexto, intervaloMinimo: 0)
+        do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de registrar un cobro recibido"
+            )
+            if distribucion.aplicadoADeuda > 0 {
+                contexto.insert(Movimiento(
+                    tipo: .cobroRecibido,
+                    monto: distribucion.aplicadoADeuda,
+                    fecha: fecha,
+                    detalle: descripcion,
+                    cuenta: cuentaDestino,
+                    persona: persona))
             }
+
+            if distribucion.excedenteComoIngreso > 0 {
+                let concepto = descripcion.isEmpty
+                    ? "Excedente recibido de \(persona.nombre)"
+                    : "\(descripcion) · excedente"
+                contexto.insert(Movimiento(
+                    tipo: .ingreso,
+                    monto: distribucion.excedenteComoIngreso,
+                    fecha: fecha,
+                    detalle: concepto,
+                    cuenta: cuentaDestino,
+                    persona: persona))
+            }
+            try CoordinadorOperacionesClaro.guardar(contexto: contexto)
+            cerrar()
+        } catch {
+            contexto.rollback()
+            errorGuardado = "El cobro no se guardó: \(error.localizedDescription)"
         }
-        cerrar()
     }
 }

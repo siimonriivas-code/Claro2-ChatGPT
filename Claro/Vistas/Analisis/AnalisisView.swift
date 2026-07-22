@@ -146,6 +146,31 @@ struct AnalisisView: View {
                             .padding(12).background(Tema.advertencia.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                     }
 
+                    NavigationLink {
+                        CierreMensualView()
+                    } label: {
+                        Panel {
+                            HStack(spacing: 12) {
+                                Image(systemName: "calendar.badge.checkmark")
+                                    .font(.title2)
+                                    .foregroundStyle(Tema.positivo)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Cierre mensual")
+                                        .font(.headline)
+                                        .foregroundStyle(Tema.textoPrincipal)
+                                    Text("Comprueba ingresos, gastos, pagos, cortes y cobros sin duplicar movimientos.")
+                                        .font(.caption)
+                                        .foregroundStyle(Tema.textoSecundario)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(Tema.textoSecundario)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     TituloSeccion(texto: "Panorama financiero")
                     Panel {
                         VStack(spacing: 12) {

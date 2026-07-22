@@ -174,7 +174,7 @@ struct CuentaDetalleView: View {
 
     private func archivarCuenta() {
         cuenta.archivada = true
-        try? contexto.save()
+        try? CoordinadorOperacionesClaro.guardar(contexto: contexto)
         cerrar()
     }
 }

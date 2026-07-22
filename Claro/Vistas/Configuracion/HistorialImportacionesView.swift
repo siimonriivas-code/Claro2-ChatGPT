@@ -89,7 +89,12 @@ struct HistorialImportacionesView: View {
         defer { porDeshacer = nil }
         guard let id = estado.importacionID else { return }
         do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: "Antes de deshacer una importación"
+            )
             try AdministradorImportaciones.deshacer(id: id, contexto: contexto)
+            CoordinadorOperacionesClaro.actualizarServicios(contexto: contexto)
             mensajeError = nil
         } catch {
             mensajeError = "No se pudo deshacer. Tus datos se conservaron; vuelve a intentarlo."
