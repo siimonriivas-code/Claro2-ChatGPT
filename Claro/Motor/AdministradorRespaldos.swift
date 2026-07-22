@@ -66,6 +66,7 @@ struct TarjetaDTO: Codable {
 struct PersonaDTO: Codable {
     let id: UUID; let nombre, colorHex: String
     var archivada: Bool? = nil
+    var identificadorNotificaciones: String? = nil
 }
 struct DeudaDTO: Codable {
     let id: UUID; let acreedor: String; let montoOriginal: Double
@@ -217,7 +218,8 @@ enum AdministradorRespaldos {
                 identificadorNotificaciones: $0.identificadorNotificaciones) },
             personas: personas.map { PersonaDTO(id: personaID[$0.persistentModelID]!,
                 nombre: $0.nombre, colorHex: $0.colorHex,
-                archivada: $0.archivada) },
+                archivada: $0.archivada,
+                identificadorNotificaciones: $0.identificadorNotificaciones) },
             deudas: deudas.map { DeudaDTO(id: deudaID[$0.persistentModelID]!,
                 acreedor: $0.acreedor, montoOriginal: $0.montoOriginal,
                 fecha: $0.fecha, notas: $0.notas, tasaAnual: $0.tasaAnual,
@@ -381,6 +383,10 @@ enum AdministradorRespaldos {
         for dto in respaldo.personas {
             let modelo = Persona(nombre: dto.nombre, colorHex: dto.colorHex)
             modelo.archivada = dto.archivada ?? false
+            if let identificador = dto.identificadorNotificaciones,
+               !identificador.isEmpty {
+                modelo.identificadorNotificaciones = identificador
+            }
             contexto.insert(modelo); personas[dto.id] = modelo
         }
         for dto in respaldo.deudas {

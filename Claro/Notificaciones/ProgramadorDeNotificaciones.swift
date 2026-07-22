@@ -14,6 +14,13 @@ import UserNotifications
 
 enum ProgramadorDeNotificaciones {
 
+    static let claveDestino = "destinoClaro"
+    static let claveIdentificador = "identificadorClaro"
+
+    private static let categoriaImportar = "CLARO_IMPORTAR_ESTADO"
+    private static let categoriaPagar = "CLARO_PAGAR_TARJETA"
+    private static let categoriaPersona = "CLARO_VER_PERSONA"
+
     private static let claveIdentificadoresAutomaticos =
         "identificadoresNotificacionesAutomaticas"
 
@@ -25,8 +32,40 @@ enum ProgramadorDeNotificaciones {
         }
     }
 
+    /// Registra las acciones y categorías antes de programar avisos. El toque
+    /// sobre el cuerpo y el botón visible conducen al mismo destino.
+    static func configurarCategorias() {
+        let abrirImportador = UNNotificationAction(
+            identifier: "ABRIR_IMPORTADOR",
+            title: "Subir estado de cuenta",
+            options: [.foreground]
+        )
+        let registrarPago = UNNotificationAction(
+            identifier: "REGISTRAR_PAGO",
+            title: "Registrar pago",
+            options: [.foreground]
+        )
+        let verPersona = UNNotificationAction(
+            identifier: "VER_PERSONA",
+            title: "Ver y compartir cobro",
+            options: [.foreground]
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(identifier: categoriaImportar,
+                                   actions: [abrirImportador],
+                                   intentIdentifiers: []),
+            UNNotificationCategory(identifier: categoriaPagar,
+                                   actions: [registrarPago],
+                                   intentIdentifiers: []),
+            UNNotificationCategory(identifier: categoriaPersona,
+                                   actions: [verPersona],
+                                   intentIdentifiers: [])
+        ])
+    }
+
     /// Pide permiso al sistema para enviar notificaciones (solo la 1a vez).
     static func pedirPermiso(alResponder: ((Bool) -> Void)? = nil) {
+        configurarCategorias()
         UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge]) { autorizado, _ in
                 DispatchQueue.main.async { alResponder?(autorizado) }
@@ -48,12 +87,20 @@ enum ProgramadorDeNotificaciones {
         var nuevos: [String] = []
 
         for tarjeta in tarjetas {
-            guard let estado = tarjeta.estadoDeCuentaVigente,
-                  estado.faltaPorCubrir > 0 else { continue }
-            nuevos.append(identificadorCorte(tarjeta: tarjeta))
-            nuevos.append(contentsOf: [10, 5, 3, 0].map {
-                identificadorPago(tarjeta: tarjeta, dias: $0)
-            })
+            nuevos.append(identificadorSubirEstado(tarjeta: tarjeta))
+            if let estado = tarjeta.estadoDeCuentaVigente,
+               estado.faltaPorCubrir > 0 {
+                nuevos.append(identificadorCorte(tarjeta: tarjeta))
+                nuevos.append(contentsOf: [10, 5, 3, 0].map {
+                    identificadorPago(tarjeta: tarjeta, dias: $0)
+                })
+                nuevos.append(contentsOf: desgloseFamiliar(
+                    estado: estado, tarjeta: tarjeta
+                ).personas.map {
+                    identificadorCobroDeCorte(tarjeta: tarjeta,
+                                               persona: $0.persona)
+                })
+            }
         }
         if personas.contains(where: { $0.saldoPendiente > 0 }) {
             nuevos.append("cobros-semanales")
@@ -64,12 +111,15 @@ enum ProgramadorDeNotificaciones {
         )
 
         for tarjeta in tarjetas {
+            programarAvisoParaSubirEstado(tarjeta: tarjeta, centro: centro)
             guard let estado = tarjeta.estadoDeCuentaVigente,
                   estado.faltaPorCubrir > 0 else { continue }
             programarResumenDeCorte(tarjeta: tarjeta, estado: estado,
                                     centro: centro)
             programarCuentaRegresiva(tarjeta: tarjeta, estado: estado,
                                      centro: centro)
+            programarCobrosDeCorte(tarjeta: tarjeta, estado: estado,
+                                   centro: centro)
         }
 
         programarCobrosPendientes(personas: personas, centro: centro)
@@ -99,6 +149,10 @@ enum ProgramadorDeNotificaciones {
         contenido.title = "Recordatorio de cobro · \(persona.nombre)"
         contenido.body = "Saldo pendiente: \(max(0, persona.saldoPendiente).comoDinero)."
         contenido.sound = .default
+        preparar(contenido,
+                 destino: .verPersona,
+                 identificador: persona.identificadorNotificaciones,
+                 categoria: categoriaPersona)
 
         let componentes = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute],
@@ -135,6 +189,8 @@ enum ProgramadorDeNotificaciones {
         contenido.title = "💰 Te deben \(total.comoDinero)"
         contenido.body = detalle
         contenido.sound = .default
+        preparar(contenido, destino: .verPersonas,
+                 identificador: nil, categoria: categoriaPersona)
 
         var componentes = DateComponents()
         componentes.weekday = 2   // lunes
@@ -170,6 +226,10 @@ enum ProgramadorDeNotificaciones {
 
             let contenido = UNMutableNotificationContent()
             contenido.sound = .default
+            preparar(contenido,
+                     destino: .pagarTarjeta,
+                     identificador: tarjeta.identificadorNotificaciones,
+                     categoria: categoriaPagar)
 
             switch dias {
             case 0:
@@ -226,6 +286,10 @@ enum ProgramadorDeNotificaciones {
         contenido.title = "✂️ Resumen de \(tarjeta.nombre)"
         contenido.body = "Saldo total \(montoVisible(estado.saldoAlCorte)). Para no generar intereses: tú \(montoVisible(resumen.parteUsuario)); familia \(montoVisible(resumen.parteFamilia))\(resumen.detalle.isEmpty ? "" : " (\(resumen.detalle))")."
         contenido.sound = .default
+        preparar(contenido,
+                 destino: .verTarjeta,
+                 identificador: tarjeta.identificadorNotificaciones,
+                 categoria: categoriaPagar)
 
         centro.add(UNNotificationRequest(
             identifier: identificadorCorte(tarjeta: tarjeta),
@@ -237,27 +301,142 @@ enum ProgramadorDeNotificaciones {
     private static func desgloseFamiliar(
         estado: EstadoDeCuenta,
         tarjeta: TarjetaCredito
-    ) -> (parteUsuario: Double, parteFamilia: Double, detalle: String) {
+    ) -> (parteUsuario: Double, parteFamilia: Double, detalle: String,
+          personas: [(persona: Persona, monto: Double)]) {
         guard let importacionID = estado.importacionID else {
-            return (estado.pagoParaNoGenerarIntereses, 0, "")
+            return (estado.pagoParaNoGenerarIntereses, 0, "", [])
         }
         let partes = tarjeta.movimientos
             .compactMap(\.compraCompartida)
             .flatMap(\.participaciones)
             .filter { $0.importacionID == importacionID }
         var porPersona: [String: Double] = [:]
+        var modelos: [String: Persona] = [:]
         for parte in partes {
-            porPersona[parte.persona?.nombre ?? "Sin asignar", default: 0]
+            let clave = parte.persona?.identificadorNotificaciones ?? "sin-asignar"
+            porPersona[clave, default: 0]
                 += parte.monto
+            if let persona = parte.persona { modelos[clave] = persona }
         }
         let familia = porPersona.values.reduce(0, +).redondeadoAMoneda
         let propio = max(0, estado.pagoParaNoGenerarIntereses - familia)
             .redondeadoAMoneda
         let detalle = porPersona
-            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
-            .map { "\($0.key) \(montoVisible($0.value))" }
+            .compactMap { clave, monto -> (String, Double)? in
+                guard let persona = modelos[clave] else { return nil }
+                return (persona.nombre, monto)
+            }
+            .sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
+            .map { "\($0.0) \(montoVisible($0.1))" }
             .joined(separator: " · ")
-        return (propio, familia, detalle)
+        let personas = porPersona.compactMap { clave, monto in
+            modelos[clave].map { (persona: $0, monto: monto.redondeadoAMoneda) }
+        }
+        return (propio, familia, detalle, personas)
+    }
+
+    /// Programa el siguiente corte esperado aunque todavía no exista el PDF.
+    /// Al abrirlo conduce directamente al importador de esa tarjeta.
+    private static func programarAvisoParaSubirEstado(
+        tarjeta: TarjetaCredito,
+        centro: UNUserNotificationCenter
+    ) {
+        guard let fecha = siguienteCorteEsperado(tarjeta: tarjeta) else { return }
+        let contenido = UNMutableNotificationContent()
+        contenido.title = "Ya cortó \(tarjeta.nombre)"
+        contenido.body = "Es momento de descargar y subir el nuevo estado de cuenta. Claro verificará fechas, saldos y continuidad antes de guardarlo."
+        contenido.sound = .default
+        preparar(contenido,
+                 destino: .importarEstado,
+                 identificador: tarjeta.identificadorNotificaciones,
+                 categoria: categoriaImportar)
+
+        let componentes = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute], from: fecha)
+        centro.add(UNNotificationRequest(
+            identifier: identificadorSubirEstado(tarjeta: tarjeta),
+            content: contenido,
+            trigger: UNCalendarNotificationTrigger(dateMatching: componentes,
+                                                   repeats: false)))
+    }
+
+    private static func siguienteCorteEsperado(
+        tarjeta: TarjetaCredito,
+        ahora: Date = .now
+    ) -> Date? {
+        let calendario = Calendar.current
+        func candidato(meses: Int) -> Date? {
+            guard let mes = calendario.date(byAdding: .month, value: meses,
+                                             to: ahora),
+                  let rango = calendario.range(of: .day, in: .month, for: mes)
+            else { return nil }
+            var componentes = calendario.dateComponents([.year, .month], from: mes)
+            componentes.day = min(max(1, tarjeta.diaCorte), rango.count)
+            componentes.hour = 10
+            componentes.minute = 0
+            return calendario.date(from: componentes)
+        }
+
+        var fecha = candidato(meses: 0)
+        if fecha == nil || fecha! <= ahora.addingTimeInterval(60) {
+            fecha = candidato(meses: 1)
+        }
+        if let fecha,
+           tarjeta.estadosDeCuenta.contains(where: {
+               calendario.isDate($0.fechaCorte, inSameDayAs: fecha)
+           }) {
+            return candidato(meses: 1)
+        }
+        return fecha
+    }
+
+    /// Cinco días antes del vencimiento recuerda a quién contactar. El aviso
+    /// abre su ficha, donde ya están el desglose y el botón Compartir cobro.
+    private static func programarCobrosDeCorte(
+        tarjeta: TarjetaCredito,
+        estado: EstadoDeCuenta,
+        centro: UNUserNotificationCenter
+    ) {
+        let calendario = Calendar.current
+        guard let dia = calendario.date(byAdding: .day, value: -5,
+                                        to: calendario.startOfDay(
+                                            for: estado.fechaLimitePago))
+        else { return }
+        var componentes = calendario.dateComponents([.year, .month, .day], from: dia)
+        componentes.hour = 10
+        guard let fecha = calendario.date(from: componentes), fecha > .now else { return }
+
+        for item in desgloseFamiliar(estado: estado, tarjeta: tarjeta).personas
+        where item.monto > 0 {
+            let contenido = UNMutableNotificationContent()
+            contenido.title = "Recuerda cobrarle a \(item.persona.nombre)"
+            contenido.body = "Su parte de \(tarjeta.nombre) es \(montoVisible(item.monto)). El pago vence en 5 días."
+            contenido.sound = .default
+            preparar(contenido,
+                     destino: .verPersona,
+                     identificador: item.persona.identificadorNotificaciones,
+                     categoria: categoriaPersona)
+            centro.add(UNNotificationRequest(
+                identifier: identificadorCobroDeCorte(
+                    tarjeta: tarjeta, persona: item.persona),
+                content: contenido,
+                trigger: UNCalendarNotificationTrigger(
+                    dateMatching: componentes, repeats: false)))
+        }
+    }
+
+    private static func preparar(
+        _ contenido: UNMutableNotificationContent,
+        destino: TipoDestinoNotificacion,
+        identificador: String?,
+        categoria: String
+    ) {
+        contenido.categoryIdentifier = categoria
+        contenido.threadIdentifier = identificador ?? destino.rawValue
+        contenido.userInfo[claveDestino] = destino.rawValue
+        if let identificador {
+            contenido.userInfo[claveIdentificador] = identificador
+        }
     }
 
     private static func montoVisible(_ monto: Double) -> String {
@@ -274,5 +453,18 @@ enum ProgramadorDeNotificaciones {
 
     private static func identificadorCorte(tarjeta: TarjetaCredito) -> String {
         "corte-\(tarjeta.identificadorNotificaciones)"
+    }
+
+    private static func identificadorSubirEstado(
+        tarjeta: TarjetaCredito
+    ) -> String {
+        "subir-estado-\(tarjeta.identificadorNotificaciones)"
+    }
+
+    private static func identificadorCobroDeCorte(
+        tarjeta: TarjetaCredito,
+        persona: Persona
+    ) -> String {
+        "cobro-corte-\(tarjeta.identificadorNotificaciones)-\(persona.identificadorNotificaciones)"
     }
 }

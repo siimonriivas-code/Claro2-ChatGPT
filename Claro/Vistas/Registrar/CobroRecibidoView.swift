@@ -17,6 +17,9 @@ struct CobroRecibidoView: View {
 
     @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
     @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }) private var tarjetas: [TarjetaCredito]
+    @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
+    @AppStorage("respaldoICloudAutomatico") private var respaldoICloudAutomatico = true
 
     @State private var monto: Double?
     @State private var personaSeleccionada: Persona?
@@ -151,6 +154,16 @@ struct CobroRecibidoView: View {
         }
 
         try? contexto.save()
+        if notificacionesActivadas {
+            ProgramadorDeNotificaciones.reprogramar(tarjetas: tarjetas,
+                                                     personas: personas)
+        }
+        if respaldoICloudAutomatico {
+            Task {
+                await AdministradorICloud.respaldarSiCorresponde(
+                    contexto: contexto, intervaloMinimo: 0)
+            }
+        }
         cerrar()
     }
 }

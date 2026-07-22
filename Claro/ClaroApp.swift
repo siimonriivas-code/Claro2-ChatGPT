@@ -12,6 +12,9 @@ import SwiftData
 
 @main
 struct ClaroApp: App {
+    @UIApplicationDelegateAdaptor(DelegadoAplicacionClaro.self)
+    private var delegadoAplicacion
+
     var body: some Scene {
         WindowGroup {
             RaizView()

@@ -20,6 +20,7 @@ struct PagoTarjetaView: View {
     @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
     @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
     @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
+    @AppStorage("respaldoICloudAutomatico") private var respaldoICloudAutomatico = true
 
     @State private var monto: Double?
     @State private var tarjetaSeleccionada: TarjetaCredito?
@@ -175,6 +176,12 @@ struct PagoTarjetaView: View {
                             if notificacionesActivadas {
                                 ProgramadorDeNotificaciones.reprogramar(
                                     tarjetas: tarjetas, personas: personas)
+                            }
+                            if respaldoICloudAutomatico {
+                                Task {
+                                    await AdministradorICloud.respaldarSiCorresponde(
+                                        contexto: contexto, intervaloMinimo: 0)
+                                }
                             }
                             cerrar()
                         } catch {

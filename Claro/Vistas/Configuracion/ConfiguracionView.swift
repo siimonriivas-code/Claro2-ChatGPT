@@ -66,7 +66,7 @@ struct ConfiguracionView: View {
                 } header: {
                     Text("Notificaciones")
                 } footer: {
-                    Text("Aviso al importar el corte, cuenta regresiva a 10, 5 y 3 días y aviso urgente el día límite. Por privacidad, las cantidades permanecen ocultas en la pantalla bloqueada salvo que tú decidas mostrarlas.")
+                    Text("Claro avisa cuando llega el día de corte para subir el PDF, muestra el resumen importado, recuerda los pagos a 10, 5 y 3 días y el día límite, y te recuerda cobrar las partes compartidas. Al tocar un aviso abre directamente la tarjeta, el pago o la persona correcta.")
                 }
 
                 Section {
@@ -107,6 +107,11 @@ struct ConfiguracionView: View {
 
                 Section {
                     NavigationLink {
+                        ICloudView()
+                    } label: {
+                        Label("iCloud automático", systemImage: "icloud.fill")
+                    }
+                    NavigationLink {
                         ElementosArchivadosView()
                     } label: {
                         Label("Elementos archivados", systemImage: "archivebox.fill")
@@ -129,7 +134,7 @@ struct ConfiguracionView: View {
                 } header: {
                     Text("Datos")
                 } footer: {
-                    Text("Elimina bancos, cuentas, tarjetas, movimientos, planes a meses, personas y estados de cuenta de este iPhone. Las categorías se restauran de fábrica. Esta acción NO se puede deshacer.")
+                    Text("El respaldo privado de iCloud protege la información sin incluir los PDF originales. Borrar datos en este iPhone no borra automáticamente el respaldo remoto.")
                 }
 
                 Section("Las leyes de Claro") {
@@ -137,7 +142,7 @@ struct ConfiguracionView: View {
                     ley("2", "Un estado de cuenta informa cuánto debes; no es un pago.")
                     ley("3", "Una compra a MSI solo concluye cuando todas las mensualidades fueron generadas Y cubiertas.")
                     ley("4", "Todo es corregible: editar o cancelar deja huella, nunca destruye la historia.")
-                    ley("5", "Privacidad primero: todo vive en tu iPhone.")
+                    ley("5", "Privacidad primero: tus datos viven en tu iPhone y, si lo activas, en tu iCloud privado.")
                 }
             }
             .scrollContentBackground(.hidden)

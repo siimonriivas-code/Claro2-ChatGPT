@@ -15,6 +15,9 @@ final class Persona {
     var nombre: String
     var colorHex: String
     var archivada: Bool = false
+    /// Identificador local estable para que un recordatorio siga abriendo a
+    /// la persona correcta aunque cambie su nombre.
+    var identificadorNotificaciones: String = UUID().uuidString
 
     // Sus partes en compras compartidas
     @Relationship(deleteRule: .cascade, inverse: \Participacion.persona)
