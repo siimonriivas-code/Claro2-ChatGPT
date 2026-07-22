@@ -49,7 +49,13 @@ struct TarjetaDetalleView: View {
     }
 
     private var movimientosRecientes: [Movimiento] {
-        Array(movimientosOrdenados.prefix(5))
+        let movimientos: [Movimiento]
+        if let vigente = tarjeta.estadoDeCuentaVigente {
+            movimientos = tarjeta.movimientos(asociadosA: vigente)
+        } else {
+            movimientos = tarjeta.movimientosDelPeriodoActual
+        }
+        return Array(movimientos.filter(\.cuentaParaCalculos).prefix(5))
     }
 
     private var planesOrdenados: [PlanMSI] {
@@ -210,9 +216,10 @@ struct TarjetaDetalleView: View {
                     }
                 }
 
-                // ── Todos los movimientos (compras regulares incluidas) ──
+                // ── Resumen del corte; el historial completo se consulta
+                //    explícitamente desde la pantalla con filtros. ──
                 if !movimientosRecientes.isEmpty {
-                    TituloSeccion(texto: "Movimientos de la tarjeta")
+                    TituloSeccion(texto: "Movimientos del corte vigente")
                     Panel {
                         VStack(spacing: 0) {
                             ForEach(movimientosRecientes) { movimiento in
@@ -223,12 +230,15 @@ struct TarjetaDetalleView: View {
                             }
                         }
                     }
+                }
+
+                if !movimientosOrdenados.isEmpty {
                     NavigationLink {
                         MovimientosTarjetaView(tarjeta: tarjeta)
                     } label: {
                         Panel {
                             HStack {
-                                Text("Ver todos los movimientos (\(movimientosOrdenados.count))")
+                                Text("Filtrar movimientos (\(movimientosOrdenados.count))")
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(Tema.acento)
                                 Spacer()

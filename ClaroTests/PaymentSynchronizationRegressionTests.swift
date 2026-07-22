@@ -130,6 +130,56 @@ final class PaymentSynchronizationRegressionTests: XCTestCase {
         XCTAssertEqual(nuevo.situacion, .pendiente)
     }
 
+    func testFiltroDeCorteNoMezclaMovimientosAnteriores() {
+        let tarjeta = TarjetaCredito(
+            nombre: "Prueba", limiteCredito: 20_000,
+            diaCorte: 17, diaLimitePago: 10,
+            fechaSaldoInicial: fecha(2026, 1, 1))
+        let loteAnterior = UUID()
+        let loteVigente = UUID()
+        let anterior = EstadoDeCuenta(
+            fechaCorte: fecha(2026, 6, 17),
+            fechaLimitePago: fecha(2026, 7, 10),
+            inicioPeriodo: fecha(2026, 5, 18),
+            finPeriodo: fecha(2026, 6, 17),
+            pagoParaNoGenerarIntereses: 500, pagoMinimo: 50,
+            saldoAlCorte: 500, tarjeta: tarjeta)
+        anterior.importacionID = loteAnterior
+        let vigente = EstadoDeCuenta(
+            fechaCorte: fecha(2026, 7, 17),
+            fechaLimitePago: fecha(2026, 8, 10),
+            inicioPeriodo: fecha(2026, 6, 18),
+            finPeriodo: fecha(2026, 7, 17),
+            pagoParaNoGenerarIntereses: 700, pagoMinimo: 70,
+            saldoAlCorte: 700, tarjeta: tarjeta)
+        vigente.importacionID = loteVigente
+
+        let compraAnterior = Movimiento(
+            tipo: .compraCredito, monto: 500,
+            fecha: fecha(2026, 6, 1), detalle: "Compra anterior",
+            tarjeta: tarjeta)
+        compraAnterior.importacionID = loteAnterior
+        let compraVigente = Movimiento(
+            tipo: .compraCredito, monto: 700,
+            fecha: fecha(2026, 7, 1), detalle: "Compra vigente",
+            tarjeta: tarjeta)
+        compraVigente.importacionID = loteVigente
+        let pagoAnterior = Movimiento(
+            tipo: .pagoTarjeta, monto: 500,
+            fecha: fecha(2026, 7, 5), detalle: "Pago anterior",
+            tarjeta: tarjeta)
+        pagoAnterior.fechaCorteObjetivoPago = anterior.fechaCorte
+
+        tarjeta.estadosDeCuenta = [anterior, vigente]
+        tarjeta.movimientos = [compraAnterior, compraVigente, pagoAnterior]
+
+        let delAnterior = tarjeta.movimientos(asociadosA: anterior)
+        let delVigente = tarjeta.movimientos(asociadosA: vigente)
+        XCTAssertEqual(Set(delAnterior.map(\.detalle)),
+                       Set(["Compra anterior", "Pago anterior"]))
+        XCTAssertEqual(delVigente.map(\.detalle), ["Compra vigente"])
+    }
+
     private func fecha(relativaA base: Date, dias: Int) -> Date {
         calendario.date(byAdding: .day, value: dias, to: base)!
     }

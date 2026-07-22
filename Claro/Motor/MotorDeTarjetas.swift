@@ -87,6 +87,45 @@ extension TarjetaCredito {
             .sorted { $0.fecha > $1.fecha }
     }
 
+    /// Actividad que pertenece visualmente a un corte concreto. La
+    /// importación es la fuente principal; los pagos se unen por el corte
+    /// objetivo que tenían al registrarse. Para movimientos manuales antiguos
+    /// sin lote se usa el periodo impreso por el banco.
+    func movimientos(asociadosA estado: EstadoDeCuenta) -> [Movimiento] {
+        let calendario = Calendar.current
+        let finExclusivo = calendario.date(
+            byAdding: .day, value: 1,
+            to: calendario.startOfDay(for: estado.finPeriodo)
+        ) ?? estado.finPeriodo
+
+        return movimientos.filter { movimiento in
+            if let lote = estado.importacionID,
+               movimiento.importacionID == lote {
+                return true
+            }
+            if let corteObjetivo = movimiento.fechaCorteObjetivoPago,
+               calendario.isDate(corteObjetivo,
+                                  inSameDayAs: estado.fechaCorte) {
+                return true
+            }
+            guard movimiento.importacionID == nil,
+                  movimiento.fecha >= estado.inicioPeriodo,
+                  movimiento.fecha < finExclusivo else { return false }
+            return movimiento.tipo != .pagoTarjeta
+        }
+        .sorted { $0.fecha > $1.fecha }
+    }
+
+    /// Actividad posterior al último corte, todavía no incluida por el banco.
+    var movimientosDelPeriodoActual: [Movimiento] {
+        guard let ultimoCorte = estadoDeCuentaVigente?.fechaCorte else {
+            return movimientos.sorted { $0.fecha > $1.fecha }
+        }
+        return movimientos
+            .filter { $0.fecha > ultimoCorte }
+            .sorted { $0.fecha > $1.fecha }
+    }
+
     /// Convierte los pagos creados por versiones anteriores en asignaciones
     /// de un solo corte. Primero reconstruye qué estado ya existía cuando se
     /// capturó el pago; si no hay metadatos antiguos suficientes, conserva la
