@@ -34,7 +34,10 @@ struct ClaroApp: App {
             OcurrenciaIngresoRecurrente.self,
             ConversacionFinanciera.self,
             MensajeFinanciero.self,
-            ConciliacionCuentaBancaria.self
+            ConciliacionCuentaBancaria.self,
+            GrupoGastosCompartidos.self,
+            GastoCompartidoIndependiente.self,
+            ParteGastoIndependiente.self
         ])
     }
 }

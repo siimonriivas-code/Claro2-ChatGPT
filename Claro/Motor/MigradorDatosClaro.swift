@@ -3,7 +3,7 @@ import SwiftData
 
 enum MigradorDatosClaro {
     private static let clave = "versionModeloDatosClaro"
-    static let versionActual = 3
+    static let versionActual = 4
 
     /// Las etapas son idempotentes: interrumpir la app no deja una migración
     /// a medias y volver a abrirla es seguro.
@@ -31,6 +31,13 @@ enum MigradorDatosClaro {
             } catch {
                 return
             }
+        }
+        if version < 4 {
+            // El módulo de gastos compartidos nace vacío y aislado. SwiftData
+            // agrega sus modelos mediante migración ligera.
+            try? contexto.save()
+            version = 4
+            UserDefaults.standard.set(version, forKey: clave)
         }
     }
 

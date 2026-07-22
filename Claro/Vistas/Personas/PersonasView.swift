@@ -27,6 +27,31 @@ struct PersonasView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    NavigationLink {
+                        GastosCompartidosView()
+                    } label: {
+                        Panel {
+                            HStack(spacing: 12) {
+                                Image(systemName: "person.3.sequence.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(Tema.acento)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Gastos entre amigos")
+                                        .font(.headline)
+                                        .foregroundStyle(Tema.textoPrincipal)
+                                    Text("Dividir y simplificar deudas · independiente de tus finanzas")
+                                        .font(.caption)
+                                        .foregroundStyle(Tema.textoSecundario)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(Tema.textoSecundario)
+                            }
+                        }
+                    }
+                    .buttonStyle(Presionable())
+
                     if personas.isEmpty {
                         estadoVacio
                     } else {

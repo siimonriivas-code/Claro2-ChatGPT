@@ -22,6 +22,8 @@ struct ImportarEstadoView: View {
 
     @Query(sort: \Categoria.nombre) private var categorias: [Categoria]
     @Query(sort: \Persona.nombre) private var personas: [Persona]
+    @Query(sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
+    @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
 
     enum Paso { case inicio, analizando, revision }
     @State private var paso: Paso = .inicio
@@ -682,6 +684,10 @@ struct ImportarEstadoView: View {
 
         do {
             try contexto.save()
+            if notificacionesActivadas {
+                ProgramadorDeNotificaciones.reprogramar(
+                    tarjetas: tarjetas, personas: personas)
+            }
             cerrar()
         } catch {
             contexto.rollback()

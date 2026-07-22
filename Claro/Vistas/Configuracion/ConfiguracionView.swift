@@ -57,7 +57,18 @@ struct ConfiguracionView: View {
                 } header: {
                     Text("Notificaciones")
                 } footer: {
-                    Text("Avisos específicos por tarjeta 10, 5, 3 y 1 día antes y el día del vencimiento, a las 9:00 am, con el monto real que falta. Se actualizan solos cada vez que abres la app; si ya cubriste un corte, sus avisos desaparecen.")
+                    Text("Aviso del día de corte con tu parte y la de tu familia; después, cuenta regresiva a 10, 5 y 3 días y aviso urgente el día límite. Se actualizan al importar, pagar y abrir la app. Son notificaciones privadas del iPhone: automáticas, gratuitas y sin entregar tus datos financieros a terceros.")
+                }
+
+                Section {
+                    ShareLink(item: "Recordatorio enviado desde Claro. Revisa tus tarjetas y pagos pendientes en la app.") {
+                        Label("Compartir recordatorio por WhatsApp",
+                              systemImage: "message.fill")
+                    }
+                } header: {
+                    Text("WhatsApp")
+                } footer: {
+                    Text("WhatsApp exige una cuenta Business, plantillas aprobadas, un servidor y cobro por mensajes para envíos automáticos oficiales. Claro no guarda tokens inseguros ni usa servicios no autorizados. Este botón permite compartir manualmente; los avisos automáticos permanecen en el iPhone.")
                 }
 
                 Section {

@@ -18,6 +18,8 @@ struct PagoTarjetaView: View {
 
     @Query(sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
     @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(sort: \Persona.nombre) private var personas: [Persona]
+    @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
 
     @State private var monto: Double?
     @State private var tarjetaSeleccionada: TarjetaCredito?
@@ -149,6 +151,10 @@ struct PagoTarjetaView: View {
                             tarjeta: tarjetaSeleccionada)
                         contexto.insert(movimiento)
                         try? contexto.save()
+                        if notificacionesActivadas {
+                            ProgramadorDeNotificaciones.reprogramar(
+                                tarjetas: tarjetas, personas: personas)
+                        }
                         cerrar()
                     }
                     .disabled(!puedeGuardar)

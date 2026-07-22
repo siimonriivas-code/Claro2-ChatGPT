@@ -2,8 +2,8 @@
 //  ProgramadorDeNotificaciones.swift
 //  Claro — Carpeta: Notificaciones
 //
-//  Recordatorios específicos por tarjeta con cuenta regresiva:
-//  10, 5, 3 y 1 día antes, y el día del vencimiento (a las 9:00 am).
+//  Recordatorios específicos por tarjeta: resumen en el día de corte,
+//  10, 5 y 3 días antes, y el día del vencimiento (a las 9:00 am).
 //  Si un corte ya está cubierto, sus recordatorios desaparecen solos,
 //  porque cada vez que abres la app TODO se reprograma desde cero
 //  con los montos reales que faltan.
@@ -48,7 +48,8 @@ enum ProgramadorDeNotificaciones {
         for tarjeta in tarjetas {
             guard let estado = tarjeta.estadoDeCuentaVigente,
                   estado.faltaPorCubrir > 0 else { continue }
-            nuevos.append(contentsOf: [10, 5, 3, 1, 0].map {
+            nuevos.append(identificadorCorte(tarjeta: tarjeta))
+            nuevos.append(contentsOf: [10, 5, 3, 0].map {
                 identificadorPago(tarjeta: tarjeta, dias: $0)
             })
         }
@@ -63,6 +64,8 @@ enum ProgramadorDeNotificaciones {
         for tarjeta in tarjetas {
             guard let estado = tarjeta.estadoDeCuentaVigente,
                   estado.faltaPorCubrir > 0 else { continue }
+            programarResumenDeCorte(tarjeta: tarjeta, estado: estado,
+                                    centro: centro)
             programarCuentaRegresiva(tarjeta: tarjeta, estado: estado,
                                      centro: centro)
         }
@@ -146,8 +149,8 @@ enum ProgramadorDeNotificaciones {
                                                  estado: EstadoDeCuenta,
                                                  centro: UNUserNotificationCenter) {
         let calendario = Calendar.current
-        let diasAntes = [10, 5, 3, 1, 0]
-        let falta = estado.faltaPorCubrir.comoDinero
+        let diasAntes = [10, 5, 3, 0]
+        let falta = montoVisible(estado.faltaPorCubrir)
 
         for dias in diasAntes {
             guard let diaAviso = calendario.date(
@@ -170,9 +173,6 @@ enum ProgramadorDeNotificaciones {
             case 0:
                 contenido.title = "🔴 HOY vence \(tarjeta.nombre)"
                 contenido.body = "Falta cubrir \(falta) para no generar intereses."
-            case 1:
-                contenido.title = "🔴 Mañana vence \(tarjeta.nombre)"
-                contenido.body = "Falta cubrir \(falta) para no generar intereses."
             case 3:
                 contenido.title = "⚠️ Faltan 3 días · \(tarjeta.nombre)"
                 contenido.body = "Aún debes \(falta) para no generar intereses."
@@ -191,8 +191,75 @@ enum ProgramadorDeNotificaciones {
         }
     }
 
+    private static func programarResumenDeCorte(
+        tarjeta: TarjetaCredito,
+        estado: EstadoDeCuenta,
+        centro: UNUserNotificationCenter
+    ) {
+        let calendario = Calendar.current
+        let inicioDia = calendario.startOfDay(for: estado.fechaCorte)
+        var componentes = calendario.dateComponents([.year, .month, .day],
+                                                    from: inicioDia)
+        componentes.hour = 9
+        var fechaDisparo = calendario.date(from: componentes) ?? inicioDia
+        if calendario.isDateInToday(estado.fechaCorte), fechaDisparo <= .now {
+            fechaDisparo = Date.now.addingTimeInterval(5)
+            componentes = calendario.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: fechaDisparo)
+        }
+        guard fechaDisparo > .now else { return }
+
+        let resumen = desgloseFamiliar(estado: estado, tarjeta: tarjeta)
+        let contenido = UNMutableNotificationContent()
+        contenido.title = "✂️ Ya cortó \(tarjeta.nombre)"
+        contenido.body = "Saldo total \(montoVisible(estado.saldoAlCorte)). Para no generar intereses: tú \(montoVisible(resumen.parteUsuario)); familia \(montoVisible(resumen.parteFamilia))\(resumen.detalle.isEmpty ? "" : " (\(resumen.detalle))")."
+        contenido.sound = .default
+
+        centro.add(UNNotificationRequest(
+            identifier: identificadorCorte(tarjeta: tarjeta),
+            content: contenido,
+            trigger: UNCalendarNotificationTrigger(
+                dateMatching: componentes, repeats: false)))
+    }
+
+    private static func desgloseFamiliar(
+        estado: EstadoDeCuenta,
+        tarjeta: TarjetaCredito
+    ) -> (parteUsuario: Double, parteFamilia: Double, detalle: String) {
+        guard let importacionID = estado.importacionID else {
+            return (estado.pagoParaNoGenerarIntereses, 0, "")
+        }
+        let partes = tarjeta.movimientos
+            .compactMap(\.compraCompartida)
+            .flatMap(\.participaciones)
+            .filter { $0.importacionID == importacionID }
+        var porPersona: [String: Double] = [:]
+        for parte in partes {
+            porPersona[parte.persona?.nombre ?? "Sin asignar", default: 0]
+                += parte.monto
+        }
+        let familia = porPersona.values.reduce(0, +).redondeadoAMoneda
+        let propio = max(0, estado.pagoParaNoGenerarIntereses - familia)
+            .redondeadoAMoneda
+        let detalle = porPersona
+            .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+            .map { "\($0.key) \(montoVisible($0.value))" }
+            .joined(separator: " · ")
+        return (propio, familia, detalle)
+    }
+
+    private static func montoVisible(_ monto: Double) -> String {
+        UserDefaults.standard.bool(forKey: "montosOcultos")
+            ? "••••" : monto.comoDinero
+    }
+
     private static func identificadorPago(tarjeta: TarjetaCredito,
                                           dias: Int) -> String {
         "pago-\(tarjeta.nombre)-\(dias)"
+    }
+
+    private static func identificadorCorte(tarjeta: TarjetaCredito) -> String {
+        "corte-\(tarjeta.nombre)"
     }
 }
