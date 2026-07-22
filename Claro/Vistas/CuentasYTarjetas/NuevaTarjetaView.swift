@@ -73,7 +73,7 @@ struct NuevaTarjetaView: View {
                 } header: {
                     Text("Deuda actual de la tarjeta")
                 } footer: {
-                    Text("¿Cuánto debe la tarjeta HOY en total? Este es su punto de partida; desde aquí el motor calculará la deuda con cada compra y pago (Ley 1). Si está en ceros, deja 0.")
+                    Text("Escribe cuánto debe la tarjeta hoy. Claro actualizará la deuda con cada compra y pago; si no debe nada, deja 0.")
                 }
                 Section("Costo del crédito (opcional)") {
                     TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)

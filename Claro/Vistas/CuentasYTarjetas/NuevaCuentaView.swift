@@ -49,7 +49,7 @@ struct NuevaCuentaView: View {
                 } header: {
                     Text("Saldo inicial")
                 } footer: {
-                    Text("Escribe cuánto dinero tiene la cuenta HOY. Desde este punto, el motor calculará el saldo con cada movimiento que registres (Ley 1).")
+                    Text("Escribe cuánto dinero tiene la cuenta hoy. Claro actualizará el saldo con cada movimiento que registres.")
                 }
             }
             .scrollContentBackground(.hidden)

@@ -201,7 +201,7 @@ struct PlanMSIDetalleView: View {
             Button("Sí, eliminar plan", role: .destructive) { eliminarPlan() }
             Button("No", role: .cancel) { }
         } message: {
-            Text("Se eliminarán el plan, sus mensualidades y su división de dueños. Úsalo para limpiar planes duplicados de importaciones de prueba.")
+            Text("Se eliminarán el plan, sus mensualidades y su división de dueños. Úsalo únicamente para corregir planes duplicados o incorrectos.")
         }
         .sheet(isPresented: $mostrandoDivision, onDismiss: aplicarDivision) {
             AsignacionCompartidaView(

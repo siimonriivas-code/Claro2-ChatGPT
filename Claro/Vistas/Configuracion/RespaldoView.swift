@@ -109,7 +109,7 @@ struct RespaldoView: View {
             }
             Button("Cancelar", role: .cancel) { respaldoPendiente = nil }
         } message: { respaldo in
-            Text("Respaldo del \(respaldo.creadoEl.formatted(date: .abbreviated, time: .shortened)), con \(respaldo.totalRegistros) registros. Se reemplazarán los datos actuales de Claro 2.")
+            Text("Respaldo del \(respaldo.creadoEl.formatted(date: .abbreviated, time: .shortened)), con \(respaldo.totalRegistros) registros. Se reemplazarán los datos actuales de Claro.")
         }
     }
 

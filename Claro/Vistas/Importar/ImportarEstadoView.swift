@@ -124,7 +124,7 @@ struct ImportarEstadoView: View {
                         Label("100% en tu iPhone", systemImage: "lock.shield.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Tema.positivo)
-                        Text("El PDF se analiza dentro de tu teléfono con tecnología de Apple. Nada sale a internet y no cuesta nada (Ley 5).")
+                        Text("El documento se procesa de forma privada en este iPhone y no se envía a servicios externos.")
                             .font(.footnote)
                             .foregroundStyle(Tema.textoSecundario)
                         Text("Descarga el estado de cuenta de \(tarjeta.nombre) desde la app de tu banco (normalmente en formato PDF) y elígelo aquí.")
@@ -177,11 +177,11 @@ struct ImportarEstadoView: View {
     private var vistaRevision: some View {
         Form {
             Section {
-                Label(usoIA ? "Analizado con Apple Intelligence en tu iPhone"
-                            : "Analizado con lector de reglas (revisa con más cuidado)",
-                      systemImage: usoIA ? "sparkles" : "text.magnifyingglass")
+                Label(usoIA ? "Análisis inteligente completado"
+                            : "Documento analizado",
+                      systemImage: usoIA ? "sparkles" : "checkmark.shield.fill")
                     .font(.footnote)
-                    .foregroundStyle(usoIA ? Tema.positivo : Tema.advertencia)
+                    .foregroundStyle(Tema.positivo)
             }
 
             Section("Documento detectado") {
@@ -235,7 +235,7 @@ struct ImportarEstadoView: View {
             } header: {
                 Text("Datos del corte (revisa y corrige)")
             } footer: {
-                Text("⚠️ Ley 2: esto solo informa. Nada quedará pagado hasta que registres pagos reales.")
+                Text("Importar el estado de cuenta no registra un pago. Los pagos se aplican únicamente cuando los captures en Claro.")
             }
 
             Section("Verificación automática") {

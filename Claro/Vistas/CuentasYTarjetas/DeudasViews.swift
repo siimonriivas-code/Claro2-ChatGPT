@@ -43,7 +43,7 @@ struct NuevaDeudaView: View {
                 } header: {
                     Text("Datos de la deuda")
                 } footer: {
-                    Text("El saldo restante se calculará solo, conforme registres abonos (Ley 1).")
+                    Text("El saldo restante se actualizará conforme registres abonos.")
                 }
                 Section("Costo y plazo (opcional)") {
                     TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)
@@ -374,7 +374,7 @@ struct EditarDeudaView: View {
                 } header: {
                     Text("Datos de la deuda")
                 } footer: {
-                    Text("⚠️ Cambiar el monto original recalcula el saldo restante (Ley 1).")
+                    Text("Cambiar el monto original recalcula el saldo restante.")
                 }
                 Section("Costo y plazo") {
                     TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)

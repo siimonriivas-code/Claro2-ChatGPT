@@ -584,9 +584,9 @@ final class AdministradorQwen: ObservableObject {
             return errorQwen.localizedDescription
         }
         if (error as NSError).domain == NSURLErrorDomain {
-            return "No pude descargar Qwen. Revisa tu conexión y el espacio disponible. Detalle: \(error.localizedDescription)"
+            return "No se pudo descargar la inteligencia local. Revisa tu conexión y el espacio disponible. Detalle: \(error.localizedDescription)"
         }
-        return "No pude preparar Qwen: \(error.localizedDescription)"
+        return "No se pudo preparar la inteligencia local: \(error.localizedDescription)"
     }
 
     private static func esCancelacionDeRed(_ error: Error) -> Bool {
@@ -618,17 +618,17 @@ private enum ErrorQwen: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .modeloNoDisponible:
-            return "Qwen no está preparado. Toca Preparar e inténtalo de nuevo."
+            return "La inteligencia local no está preparada. Toca Preparar e inténtalo de nuevo."
         case .respuestaEnCurso:
-            return "Qwen todavía está terminando la respuesta anterior."
-        case .respuestaVacia: return "Qwen no produjo una respuesta."
+            return "La inteligencia local todavía está terminando la respuesta anterior."
+        case .respuestaVacia: return "La inteligencia local no produjo una respuesta."
         case .solicitudDemasiadoLarga:
             return "La pregunta contiene demasiado texto para procesarla de forma segura en el iPhone."
         case .rutaNoSegura: return "No se pudo verificar la carpeta del modelo."
         case .espacioInsuficiente(let requerido, let disponible):
             let formato = ByteCountFormatter()
             formato.countStyle = .file
-            return "Falta espacio para descargar Qwen: necesita aproximadamente \(formato.string(fromByteCount: requerido)) y hay \(formato.string(fromByteCount: disponible)) disponibles."
+            return "Falta espacio para descargar la inteligencia local: necesita aproximadamente \(formato.string(fromByteCount: requerido)) y hay \(formato.string(fromByteCount: disponible)) disponibles."
         }
     }
 }

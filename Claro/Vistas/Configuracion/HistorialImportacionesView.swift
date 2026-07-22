@@ -24,7 +24,7 @@ struct HistorialImportacionesView: View {
                 ContentUnavailableView(
                     "Sin importaciones recientes",
                     systemImage: "doc.text.magnifyingglass",
-                    description: Text("Los estados importados a partir de esta versión aparecerán aquí."))
+                    description: Text("Aquí aparecerán los estados de cuenta que importes."))
             } else {
                 ForEach(importaciones) { estado in
                     VStack(alignment: .leading, spacing: 7) {

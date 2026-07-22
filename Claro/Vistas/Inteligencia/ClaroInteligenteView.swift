@@ -98,10 +98,10 @@ struct ClaroInteligenteView: View {
                 Text(voz.aviso ?? "")
             }
         .confirmationDialog(
-            "¿Eliminar \(qwen.nombreVisible) del iPhone?",
+            "¿Eliminar la inteligencia local del iPhone?",
             isPresented: $confirmarEliminacionQwen,
             titleVisibility: .visible) {
-                Button("Eliminar modelo", role: .destructive) {
+                Button("Eliminar", role: .destructive) {
                     try? qwen.eliminarModelo()
                 }
                 Button("Cancelar", role: .cancel) {}
@@ -144,7 +144,7 @@ struct ClaroInteligenteView: View {
                     Button {
                         qwen.iniciarDescarga()
                     } label: {
-                        Label("Descargar Qwen 4B", systemImage: "arrow.down.circle")
+                        Label("Descargar inteligencia local", systemImage: "arrow.down.circle")
                     }
 
                 case .descargando:
@@ -155,12 +155,12 @@ struct ClaroInteligenteView: View {
                     }
 
                 case .descargado, .listo:
-                    Label("Apple + Qwen disponibles",
+                    Label("Inteligencia local disponible",
                           systemImage: "checkmark.circle.fill")
                     Button(role: .destructive) {
                         confirmarEliminacionQwen = true
                     } label: {
-                        Label("Eliminar Qwen del iPhone", systemImage: "trash")
+                        Label("Eliminar inteligencia local", systemImage: "trash")
                     }
 
                 case .cargando:

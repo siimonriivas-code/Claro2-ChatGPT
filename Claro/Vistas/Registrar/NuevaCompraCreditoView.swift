@@ -117,7 +117,7 @@ struct NuevaCompraCreditoView: View {
                     }
                 } footer: {
                     if esMSI {
-                        Text("⚠️ Ley 3: cada mensualidad se irá GENERANDO al registrar los cortes, y solo quedará CUBIERTA cuando pagues el corte que la incluya. El pago congelado (esquema Banamex) es un pago diferido que se cobra al terminar las mensualidades: se registra como la última mensualidad del plan.")
+                        Text("Cada mensualidad quedará pendiente al incluirse en un corte y se cubrirá con el pago correspondiente. Si existe un pago final diferido, se agregará como la última mensualidad del plan.")
                     }
                 }
 

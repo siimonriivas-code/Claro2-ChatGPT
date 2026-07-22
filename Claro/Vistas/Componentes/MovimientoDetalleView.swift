@@ -89,7 +89,7 @@ struct MovimientoDetalleView: View {
                         }
                         TextField("Descripción", text: $detalleEditado)
                     } header: {
-                        Text("Editar (Ley 4)")
+                        Text("Editar movimiento")
                     } footer: {
                         Text("Al guardar, cada cambio queda en la bitácora y todos los saldos se recalculan solos.")
                     }

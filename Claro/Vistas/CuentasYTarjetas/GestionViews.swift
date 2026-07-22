@@ -123,7 +123,7 @@ struct EditarCuentaView: View {
                 } header: {
                     Text("Punto de partida")
                 } footer: {
-                    Text("⚠️ Cambiar el saldo inicial recalcula el saldo actual de toda la cuenta (Ley 1). Úsalo solo para corregir el punto de partida.")
+                    Text("Cambiar el saldo inicial recalcula el saldo actual de toda la cuenta. Úsalo solo para corregir el punto de partida.")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -217,7 +217,7 @@ struct EditarTarjetaView: View {
                 } header: {
                     Text("Punto de partida")
                 } footer: {
-                    Text("⚠️ Cambiar la deuda inicial recalcula la deuda actual de la tarjeta (Ley 1).")
+                    Text("Cambiar la deuda inicial recalcula la deuda actual de la tarjeta.")
                 }
                 Section("Costo del crédito") {
                     TextField("Tasa anual %", value: $tasaAnual, format: .number).keyboardType(.decimalPad)

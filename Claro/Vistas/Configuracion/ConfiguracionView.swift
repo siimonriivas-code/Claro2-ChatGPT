@@ -2,7 +2,7 @@
 //  ConfiguracionView.swift
 //  Claro — Carpeta: Vistas/Configuracion
 //
-//  Seguridad, notificaciones y las Leyes de la app.
+//  Seguridad, notificaciones y preferencias de la app.
 //
 
 import SwiftUI
@@ -70,22 +70,11 @@ struct ConfiguracionView: View {
                 }
 
                 Section {
-                    ShareLink(item: "Recordatorio enviado desde Claro. Revisa tus tarjetas y pagos pendientes en la app.") {
-                        Label("Compartir recordatorio por WhatsApp",
-                              systemImage: "message.fill")
-                    }
-                } header: {
-                    Text("WhatsApp")
-                } footer: {
-                    Text("WhatsApp exige una cuenta Business, plantillas aprobadas, un servidor y cobro por mensajes para envíos automáticos oficiales. Claro no guarda tokens inseguros ni usa servicios no autorizados. Este botón permite compartir manualmente; los avisos automáticos permanecen en el iPhone.")
-                }
-
-                Section {
-                    Toggle("Analizar PDFs con Apple Intelligence", isOn: $importarConIA)
+                    Toggle("Análisis inteligente de documentos", isOn: $importarConIA)
                 } header: {
                     Text("Importación de estados de cuenta")
                 } footer: {
-                    Text("Hey Banco, Liverpool y RappiCard usan automáticamente lectores especializados y OCR local. En otros bancos puedes activar Apple Intelligence como apoyo.")
+                    Text("Mejora la lectura de documentos complejos sin enviar tus estados de cuenta fuera del iPhone.")
                 }
 
                 Section {
@@ -96,8 +85,8 @@ struct ConfiguracionView: View {
                             set: { fechaAnalisisReferencia = $0.timeIntervalSince1970 }),
                                    displayedComponents: .date)
                     }
-                } header: { Text("Modo histórico o de pruebas") }
-                  footer: { Text("Afecta las proyecciones y la IA, pero no modifica las fechas ni los movimientos guardados.") }
+                } header: { Text("Análisis histórico") }
+                  footer: { Text("Permite consultar tus finanzas desde una fecha anterior sin modificar movimientos ni fechas guardadas.") }
 
                 Section {
                     NavigationLink { IngresosRecurrentesView() } label: {
@@ -137,13 +126,6 @@ struct ConfiguracionView: View {
                     Text("El respaldo privado de iCloud protege la información sin incluir los PDF originales. Borrar datos en este iPhone no borra automáticamente el respaldo remoto.")
                 }
 
-                Section("Las leyes de Claro") {
-                    ley("1", "Una sola fuente de verdad: los saldos se calculan desde los movimientos, nunca se escriben a mano.")
-                    ley("2", "Un estado de cuenta informa cuánto debes; no es un pago.")
-                    ley("3", "Una compra a MSI solo concluye cuando todas las mensualidades fueron generadas Y cubiertas.")
-                    ley("4", "Todo es corregible: editar o cancelar deja huella, nunca destruye la historia.")
-                    ley("5", "Privacidad primero: tus datos viven en tu iPhone y, si lo activas, en tu iCloud privado.")
-                }
             }
             .scrollContentBackground(.hidden)
             .background(Tema.fondo.ignoresSafeArea())
@@ -175,18 +157,6 @@ struct ConfiguracionView: View {
                                            restaurarCategorias: true)
     }
 
-    private func ley(_ numero: String, _ texto: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(numero)
-                .font(.headline)
-                .foregroundStyle(Tema.positivo)
-                .frame(width: 22)
-            Text(texto)
-                .font(.footnote)
-                .foregroundStyle(Tema.textoPrincipal)
-        }
-        .padding(.vertical, 2)
-    }
 }
 
 private struct ElementosArchivadosView: View {

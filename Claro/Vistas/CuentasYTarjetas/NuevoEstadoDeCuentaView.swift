@@ -70,7 +70,7 @@ struct NuevoEstadoDeCuentaView: View {
                 } header: {
                     Text("Montos del estado de cuenta")
                 } footer: {
-                    Text("⚠️ Ley 2: registrar este corte solo informa cuánto pide el banco. NADA quedará marcado como pagado hasta que registres pagos reales.")
+                    Text("Registrar el corte no registra un pago. Los pagos se aplican únicamente cuando los captures en Claro.")
                 }
 
                 if !planesConPendiente.isEmpty {
@@ -91,7 +91,7 @@ struct NuevoEstadoDeCuentaView: View {
                     } header: {
                         Text("Mensualidades MSI incluidas en este corte")
                     } footer: {
-                        Text("⚠️ Ley 3: incluir una mensualidad aquí solo registra que el banco la GENERÓ. Quedará CUBIERTA únicamente cuando pagues este corte completo.")
+                        Text("Una mensualidad incluida quedará pendiente hasta que el pago correspondiente cubra este corte.")
                     }
                 }
             }
