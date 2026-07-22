@@ -75,7 +75,7 @@ struct NuevaDeudaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }
 
@@ -190,7 +190,7 @@ struct AbonoDeudaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }
 
@@ -406,6 +406,6 @@ struct EditarDeudaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }

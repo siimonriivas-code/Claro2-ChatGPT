@@ -48,40 +48,116 @@ extension Color {
 
 enum Tema {
     // Fondos
-    static let fondo        = Color(claro: "F2F4F8", oscuro: "0B0E14")
-    static let panel        = Color(claro: "FFFFFF", oscuro: "151A23")
-    static let panelElevado = Color(claro: "E9EDF4", oscuro: "1C2230")
+    static let fondo         = Color(claro: "F5F7FC", oscuro: "070A11")
+    static let panel         = Color(claro: "FFFFFF", oscuro: "111722")
+    static let panelElevado  = Color(claro: "E9EEF8", oscuro: "192231")
+    static let panelProfundo = Color(claro: "E2E8F4", oscuro: "0C111B")
 
     // Texto
-    static let textoPrincipal  = Color(claro: "141A26", oscuro: "F2F5F9")
-    static let textoSecundario = Color(claro: "5F6877", oscuro: "8A93A6")
+    static let textoPrincipal  = Color(claro: "111827", oscuro: "F7F9FC")
+    static let textoSecundario = Color(claro: "667085", oscuro: "909BB0")
 
     // Acentos con significado (más profundos en claro para que contrasten)
-    static let positivo    = Color(claro: "0E9D6B", oscuro: "4ADE9C")  // verde
-    static let advertencia = Color(claro: "C4790A", oscuro: "F5B14C")  // ámbar
-    static let urgente     = Color(claro: "D64545", oscuro: "F26D6D")  // rojo
-    static let acento      = Color(claro: "3E63E8", oscuro: "6C8CFF")  // azul
+    static let positivo    = Color(claro: "078C68", oscuro: "55EDB5")
+    static let advertencia = Color(claro: "B86B00", oscuro: "FFB84D")
+    static let urgente     = Color(claro: "D43C55", oscuro: "FF667D")
+    static let acento      = Color(claro: "315BE8", oscuro: "7594FF")
+    static let cyan        = Color(claro: "007E99", oscuro: "48D7F0")
+    static let violeta     = Color(claro: "7546D8", oscuro: "B493FF")
+    static let coral       = Color(claro: "D9573F", oscuro: "FF8B72")
+    static let oro         = Color(claro: "A66A00", oscuro: "FFD275")
 
     // Panel protagonista del Inicio (Disponible real)
-    static let heroSuperior = Color(claro: "DCE9F7", oscuro: "18324A")
-    static let heroInferior = Color(claro: "EDF3FA", oscuro: "111826")
-    static let heroBorde    = Color(claro: "C3D4E8", oscuro: "26364A")
-    static let heroTexto    = Color(claro: "5B7797", oscuro: "9FB4C9")
+    static let heroSuperior = Color(claro: "DDEBFF", oscuro: "122A38")
+    static let heroInferior = Color(claro: "F2ECFF", oscuro: "151426")
+    static let heroBorde    = Color(claro: "C7D7F3", oscuro: "2A3A52")
+    static let heroTexto    = Color(claro: "4C6689", oscuro: "AABBD2")
+
+    static let gradienteMarca = LinearGradient(
+        colors: [positivo, cyan, acento, violeta],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing)
+
+    static let gradienteAccion = LinearGradient(
+        colors: [Color(claro: "087F68", oscuro: "36CFA0"),
+                 Color(claro: "176D9F", oscuro: "3199C9")],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing)
 
     /// Gradiente "de plástico" para las tarjetas de crédito:
     /// del color del banco hacia su versión muy oscura.
     static func gradientePlastico(hex: String) -> LinearGradient {
-        LinearGradient(colors: [Color(hex: hex),
-                                Color(hex: hex, brillo: 0.30)],
-                       startPoint: .topLeading,
-                       endPoint: .bottomTrailing)
+        gradienteTarjeta(hex: hex)
     }
+
+    /// Conserva la identidad del banco y añade una tinta vecina y profundidad.
+    static func coloresPrismaticos(hex: String) -> [Color] {
+        let base = UIColor(hexString: hex)
+        var h: CGFloat = 0
+        var s: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+        guard base.getHue(&h, saturation: &s, brightness: &b, alpha: &a) else {
+            return [Color(hex: hex), Color(hex: hex, brillo: 0.30)]
+        }
+        let saturacion = max(0.55, s)
+        let secundaria = UIColor(
+            hue: (h + 0.09).truncatingRemainder(dividingBy: 1),
+            saturation: min(1, saturacion + 0.12),
+            brightness: max(0.50, b * 0.84), alpha: 1)
+        let profunda = UIColor(
+            hue: (h + 0.98).truncatingRemainder(dividingBy: 1),
+            saturation: min(1, saturacion + 0.18),
+            brightness: max(0.16, b * 0.30), alpha: 1)
+        return [Color(uiColor: base), Color(uiColor: secundaria),
+                Color(uiColor: profunda)]
+    }
+
+    static func gradienteTarjeta(hex: String) -> LinearGradient {
+        LinearGradient(colors: coloresPrismaticos(hex: hex),
+                       startPoint: UnitPoint(x: 0.04, y: 0.02),
+                       endPoint: UnitPoint(x: 0.96, y: 1))
+    }
+
+    static let gradienteBorde = LinearGradient(
+        colors: [.white.opacity(0.36), acento.opacity(0.18),
+                 positivo.opacity(0.12), .white.opacity(0.03)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing)
 
     /// Gradiente del panel protagonista del Inicio (Disponible real).
     static let gradienteHero = LinearGradient(
         colors: [heroSuperior, heroInferior],
         startPoint: .topLeading,
         endPoint: .bottomTrailing)
+}
+
+/// Fondo oficial de contenido. Las auroras son tenues para no competir con
+/// cifras, estados ni gráficas.
+struct FondoClaro: View {
+    @Environment(\.colorScheme) private var esquema
+
+    var body: some View {
+        ZStack {
+            Tema.fondo
+            Circle()
+                .fill(Tema.acento.opacity(esquema == .dark ? 0.13 : 0.09))
+                .frame(width: 360, height: 360)
+                .blur(radius: 90)
+                .offset(x: 170, y: -330)
+            Circle()
+                .fill(Tema.positivo.opacity(esquema == .dark ? 0.10 : 0.08))
+                .frame(width: 320, height: 320)
+                .blur(radius: 100)
+                .offset(x: -190, y: 260)
+            Circle()
+                .fill(Tema.violeta.opacity(esquema == .dark ? 0.08 : 0.05))
+                .frame(width: 280, height: 280)
+                .blur(radius: 110)
+                .offset(x: 180, y: 610)
+        }
+        .ignoresSafeArea()
+    }
 }
 
 // MARK: - Apariencia elegida por el usuario (Configuración)

@@ -148,7 +148,7 @@ struct MovimientosTarjetaView: View {
             }
             .padding(16)
         }
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle("Movimientos")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

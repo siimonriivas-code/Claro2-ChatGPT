@@ -260,7 +260,7 @@ struct TarjetaDetalleView: View {
             }
             .padding(16)
         }
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle(tarjeta.nombre)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -49,13 +49,7 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Fecha del día (diseño Claro Premium)
-                    Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
-                        .font(.caption.weight(.semibold))
-                        .textCase(.uppercase)
-                        .tracking(1.1)
-                        .foregroundStyle(Tema.textoSecundario)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    cabecera
 
                     accesoClaroInteligente
 
@@ -64,10 +58,12 @@ struct DashboardView: View {
                     HStack(spacing: 16) {
                         panelMini(titulo: "Comprometido",
                                   monto: comprometido,
-                                  color: Tema.advertencia)
+                                  color: Tema.advertencia,
+                                  icono: "lock.fill")
                         panelMini(titulo: "Te deben",
                                   monto: teDeben,
-                                  color: Tema.acento)
+                                  color: Tema.acento,
+                                  icono: "person.2.fill")
                     }
 
                     if !pagosProximos.isEmpty {
@@ -96,8 +92,8 @@ struct DashboardView: View {
                 }
                 .padding(16)
             }
-            .background(Tema.fondo.ignoresSafeArea())
-            .navigationTitle("Inicio")
+            .background(FondoClaro())
+            .navigationTitle("Claro")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
@@ -133,6 +129,23 @@ struct DashboardView: View {
         }
     }
 
+    private var cabecera: some View {
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("TU CAPITAL, EN CLARO")
+                    .font(.caption2.weight(.bold))
+                    .tracking(1.45)
+                    .foregroundStyle(Tema.positivo)
+                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Tema.textoSecundario)
+            }
+            Spacer()
+            Pildora(texto: disponible >= 0 ? "Bajo control" : "Requiere atención",
+                    color: disponible >= 0 ? Tema.positivo : Tema.urgente)
+        }
+    }
+
     /// Acceso rápido desde Inicio. Si la app seguía al sistema, toma el
     /// aspecto que se ve en ese momento y cambia al contrario.
     private func alternarApariencia() {
@@ -146,11 +159,7 @@ struct DashboardView: View {
             mostrandoClaroInteligente = true
         } label: {
             HStack(spacing: 13) {
-                Image(systemName: "sparkles")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(Tema.acento)
-                    .frame(width: 44, height: 44)
-                    .background(Tema.acento.opacity(0.15), in: Circle())
+                OrbeClaro(icono: "sparkles", color: Tema.violeta)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Pregúntale a Claro")
                         .font(.headline)
@@ -165,48 +174,100 @@ struct DashboardView: View {
                     .foregroundStyle(Tema.textoSecundario)
             }
             .padding(16)
-            .background(
-                LinearGradient(colors: [Tema.acento.opacity(0.15), Tema.panel],
-                               startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Tema.acento.opacity(0.25), lineWidth: 1))
+            .background(Tema.panel,
+                        in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(colors: [Tema.violeta.opacity(0.55),
+                                                Tema.cyan.opacity(0.22), .clear],
+                                       startPoint: .topLeading,
+                                       endPoint: .bottomTrailing), lineWidth: 1)
+            }
+            .shadow(color: Tema.violeta.opacity(0.12), radius: 18, y: 9)
         }
         .buttonStyle(Presionable())
     }
 
     private var panelDisponible: some View {
-        Panel {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("DINERO TOTAL EN TUS CUENTAS")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Tema.textoSecundario)
-                Text(dineroEnCuentas.comoDinero)
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .foregroundStyle(dineroEnCuentas >= 0 ? Tema.positivo : Tema.urgente)
+        ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Tema.gradienteHero)
+            Circle()
+                .fill(Tema.cyan.opacity(0.16))
+                .frame(width: 210, height: 210)
+                .blur(radius: 20)
+                .offset(x: 68, y: -92)
+            Circle()
+                .stroke(Tema.acento.opacity(0.12), lineWidth: 22)
+                .frame(width: 150, height: 150)
+                .offset(x: 58, y: 105)
 
-                Divider().overlay(Tema.panelElevado)
-
+            VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    Text("Disponible después de apartar cortes")
-                        .font(.footnote)
-                        .foregroundStyle(Tema.textoSecundario)
+                    Label("DINERO EN CUENTAS", systemImage: "wallet.bifold.fill")
+                        .font(.caption2.weight(.bold))
+                        .tracking(1.0)
+                        .foregroundStyle(Tema.heroTexto)
                     Spacer()
-                    Text(disponible.comoDinero)
-                        .font(.system(.body, design: .rounded).weight(.bold))
-                        .foregroundStyle(disponible >= 0 ? Tema.positivo : Tema.urgente)
+                    Image(systemName: "waveform.path.ecg")
+                        .foregroundStyle(Tema.positivo)
                 }
-                Text("Suma todas tus cuentas y después descuenta lo comprometido en tarjetas.")
-                    .font(.footnote)
-                    .foregroundStyle(Tema.textoSecundario)
+                Text(dineroEnCuentas.comoDinero)
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.68)
+                    .monospacedDigit()
+                    .foregroundStyle(dineroEnCuentas >= 0
+                                     ? Tema.textoPrincipal : Tema.urgente)
+
+                VStack(spacing: 9) {
+                    HStack {
+                        Text("Disponible después de apartar cortes")
+                            .font(.footnote)
+                            .foregroundStyle(Tema.heroTexto)
+                        Spacer()
+                        Text(disponible.comoDinero)
+                            .font(.system(.headline, design: .rounded).weight(.bold))
+                            .monospacedDigit()
+                            .foregroundStyle(disponible >= 0
+                                             ? Tema.positivo : Tema.urgente)
+                    }
+                    GeometryReader { geo in
+                        let proporcion = dineroEnCuentas > 0
+                            ? CGFloat(max(0, min(1, disponible / dineroEnCuentas)))
+                            : 0
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Tema.heroBorde.opacity(0.55))
+                            Capsule().fill(Tema.gradienteAccion)
+                                .frame(width: geo.size.width * proporcion)
+                        }
+                    }
+                    .frame(height: 7)
+                    Text("El resto ya está reservado para tus cortes vigentes.")
+                        .font(.caption2)
+                        .foregroundStyle(Tema.textoSecundario)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
+            .padding(22)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous)
+            .strokeBorder(Tema.heroBorde.opacity(0.75), lineWidth: 1))
+        .shadow(color: Tema.acento.opacity(0.12), radius: 24, y: 12)
     }
 
-    private func panelMini(titulo: String, monto: Double, color: Color) -> some View {
+    private func panelMini(titulo: String, monto: Double,
+                           color: Color, icono: String) -> some View {
         Panel {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 9) {
+                Image(systemName: icono)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(color)
+                    .frame(width: 28, height: 28)
+                    .background(color.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 9,
+                                                     style: .continuous))
                 Text(titulo.uppercased())
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Tema.textoSecundario)

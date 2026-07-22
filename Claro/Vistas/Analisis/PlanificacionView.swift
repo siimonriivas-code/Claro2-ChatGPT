@@ -79,7 +79,7 @@ struct PlanificacionView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle("Planificación")
         .sheet(isPresented: $mostrandoPresupuesto) {
             EditarPresupuestoView(categorias: categorias,

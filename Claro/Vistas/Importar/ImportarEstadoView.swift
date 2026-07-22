@@ -1092,7 +1092,7 @@ struct AsignacionCompartidaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 
     private func bindingParticipa(_ persona: Persona) -> Binding<Bool> {

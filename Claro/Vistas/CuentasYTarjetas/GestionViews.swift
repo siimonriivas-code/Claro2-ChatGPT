@@ -18,8 +18,9 @@ struct EditarBancoView: View {
     @State private var nombre: String
     @State private var colorHex: String
 
-    private let colores = ["004481", "EB0029", "820AD1", "6C8CFF",
-                           "4ADE9C", "F5B14C", "FF8CC8", "D9A66C"]
+    private let colores = ["004481", "EB0029", "820AD1", "0E7490",
+                           "0F9D7A", "3D5AFE", "7C3AED", "C026D3",
+                           "E11D48", "EA580C", "D4A017", "172033"]
 
     init(banco: Banco) {
         self.banco = banco
@@ -38,7 +39,7 @@ struct EditarBancoView: View {
                               spacing: 14) {
                         ForEach(colores, id: \.self) { hex in
                             Circle()
-                                .fill(Color(hex: hex))
+                                .fill(Tema.gradienteTarjeta(hex: hex))
                                 .frame(width: 40, height: 40)
                                 .overlay {
                                     if colorHex == hex {
@@ -54,7 +55,7 @@ struct EditarBancoView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Editar banco")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -71,7 +72,7 @@ struct EditarBancoView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }
 
@@ -126,7 +127,7 @@ struct EditarCuentaView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Editar cuenta")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -146,7 +147,7 @@ struct EditarCuentaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }
 
@@ -169,8 +170,9 @@ struct EditarTarjetaView: View {
     @State private var tasaAnual: Double?
     @State private var cat: Double?
 
-    private let colores = ["004481", "EB0029", "820AD1", "6C8CFF",
-                           "4ADE9C", "F5B14C", "FF8CC8", "1C2230"]
+    private let colores = ["004481", "EB0029", "820AD1", "0E7490",
+                           "0F9D7A", "3D5AFE", "7C3AED", "C026D3",
+                           "E11D48", "EA580C", "D4A017", "172033"]
 
     init(tarjeta: TarjetaCredito) {
         self.tarjeta = tarjeta
@@ -226,7 +228,7 @@ struct EditarTarjetaView: View {
                               spacing: 14) {
                         ForEach(colores, id: \.self) { hex in
                             Circle()
-                                .fill(Color(hex: hex))
+                                .fill(Tema.gradienteTarjeta(hex: hex))
                                 .frame(width: 40, height: 40)
                                 .overlay {
                                     if colorHex == hex {
@@ -242,7 +244,7 @@ struct EditarTarjetaView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Editar tarjeta")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -267,7 +269,7 @@ struct EditarTarjetaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }
 
@@ -280,8 +282,9 @@ struct EditarPersonaView: View {
     @State private var nombre: String
     @State private var colorHex: String
 
-    private let colores = ["004481", "EB0029", "820AD1", "6C8CFF",
-                           "4ADE9C", "F5B14C", "FF8CC8", "D9A66C"]
+    private let colores = ["004481", "EB0029", "820AD1", "0E7490",
+                           "0F9D7A", "3D5AFE", "7C3AED", "C026D3",
+                           "E11D48", "EA580C", "D4A017", "172033"]
 
     init(persona: Persona) {
         self.persona = persona
@@ -300,7 +303,7 @@ struct EditarPersonaView: View {
                               spacing: 14) {
                         ForEach(colores, id: \.self) { hex in
                             Circle()
-                                .fill(Color(hex: hex))
+                                .fill(Tema.gradienteTarjeta(hex: hex))
                                 .frame(width: 40, height: 40)
                                 .overlay {
                                     if colorHex == hex {
@@ -316,7 +319,7 @@ struct EditarPersonaView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Editar persona")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -333,6 +336,6 @@ struct EditarPersonaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }

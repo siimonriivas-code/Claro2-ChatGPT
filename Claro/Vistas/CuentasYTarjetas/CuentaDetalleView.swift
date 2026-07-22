@@ -113,7 +113,7 @@ struct CuentaDetalleView: View {
             }
             .padding(16)
         }
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle(cuenta.nombre)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

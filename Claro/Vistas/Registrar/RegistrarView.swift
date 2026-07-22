@@ -10,6 +10,7 @@
 import SwiftUI
 
 struct RegistrarView: View {
+    @Environment(\.dismiss) private var cerrar
 
     enum Hoja: String, Identifiable {
         case ingreso, gasto, transferencia, compraCredito, pagoTarjeta, cobro, abonoDeuda
@@ -22,9 +23,19 @@ struct RegistrarView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("¿Qué quieres registrar hoy?")
-                        .font(.footnote)
-                        .foregroundStyle(Tema.textoSecundario)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("MOVIMIENTO RÁPIDO")
+                            .font(.caption2.weight(.bold))
+                            .tracking(1.35)
+                            .foregroundStyle(Tema.positivo)
+                        Text("¿Qué pasó con tu dinero?")
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(Tema.textoPrincipal)
+                        Text("Elige una acción; Claro conectará cuentas, tarjetas y personas.")
+                            .font(.footnote)
+                            .foregroundStyle(Tema.textoSecundario)
+                    }
+                    .padding(.bottom, 4)
 
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12),
                                         GridItem(.flexible())],
@@ -67,8 +78,14 @@ struct RegistrarView: View {
                 }
                 .padding(16)
             }
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Registrar")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cerrar") { cerrar() }
+                }
+            }
             .sheet(item: $hojaActiva) { hoja in
                 switch hoja {
                 case .ingreso:       NuevoMovimientoView(tipo: .ingreso)
@@ -87,13 +104,7 @@ struct RegistrarView: View {
                         color: Color, accion: @escaping () -> Void) -> some View {
         Button(action: accion) {
             VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: icono)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 38, height: 38)
-                    .background(color.opacity(0.15),
-                                in: RoundedRectangle(cornerRadius: 12,
-                                                     style: .continuous))
+                OrbeClaro(icono: icono, color: color, lado: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(titulo)
                         .font(.subheadline.weight(.semibold))
@@ -109,7 +120,15 @@ struct RegistrarView: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Tema.panel,
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(colors: [color.opacity(0.35), .clear],
+                                       startPoint: .topLeading,
+                                       endPoint: .bottomTrailing), lineWidth: 0.8)
+            }
+            .shadow(color: color.opacity(0.08), radius: 12, y: 6)
         }
         .buttonStyle(Presionable())
     }

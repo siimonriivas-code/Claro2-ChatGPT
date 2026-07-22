@@ -16,7 +16,7 @@ struct BloqueoView: View {
 
     var body: some View {
         ZStack {
-            Tema.fondo.ignoresSafeArea()
+            FondoClaro()
 
             VStack(spacing: 20) {
                 ZStack {
@@ -27,9 +27,16 @@ struct BloqueoView: View {
                             center: .center,
                             startRadius: 0, endRadius: 75))
                         .frame(width: 150, height: 150)
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 52))
-                        .foregroundStyle(Tema.positivo)
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 48, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 94, height: 94)
+                        .background(Tema.gradienteMarca,
+                                    in: RoundedRectangle(cornerRadius: 28,
+                                                         style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 28,
+                                                  style: .continuous)
+                            .strokeBorder(.white.opacity(0.28), lineWidth: 0.9))
                 }
 
                 Text("Claro")

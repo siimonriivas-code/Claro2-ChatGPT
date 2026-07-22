@@ -388,7 +388,7 @@ struct AnalisisView: View {
                 }
                 .padding(16)
             }
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Análisis")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {

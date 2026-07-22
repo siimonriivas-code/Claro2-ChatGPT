@@ -18,8 +18,6 @@ struct TarjetaVisual: View {
     /// La usan otras vistas (ej. MazoTarjetas) para calcular alturas.
     static let proporcion: CGFloat = 1.586
 
-    private var colorBase: Color { Color(hex: tarjeta.colorHex) }
-
     /// Versión oscurecida del color del banco (para el gradiente).
     private func oscurecido(_ factor: Double) -> Color {
         let limpio = tarjeta.colorHex.trimmingCharacters(
@@ -67,19 +65,35 @@ struct TarjetaVisual: View {
         .padding(20)
         .frame(maxWidth: .infinity)
         .aspectRatio(Self.proporcion, contentMode: .fit)
-        .background(
-            LinearGradient(colors: [colorBase, oscurecido(0.32)],
-                           startPoint: .topLeading,
-                           endPoint: .bottomTrailing)
-        )
-        // Reflejo de vidrio + brillo inferior sutil
+        .background(Tema.gradienteTarjeta(hex: tarjeta.colorHex))
+        // Tintas prismáticas, reflejo y textura óptica propia de Claro.
         .overlay {
-            LinearGradient(colors: [.white.opacity(0.18), .clear],
-                           startPoint: .topLeading,
-                           endPoint: UnitPoint(x: 0.42, y: 0.42))
-            RadialGradient(colors: [.white.opacity(0.07), .clear],
-                           center: UnitPoint(x: 0.85, y: 1.15),
-                           startRadius: 0, endRadius: 220)
+            GeometryReader { geo in
+                ZStack {
+                    Circle()
+                        .fill(Tema.cyan.opacity(0.24))
+                        .frame(width: geo.size.width * 0.58)
+                        .blur(radius: 34)
+                        .offset(x: geo.size.width * 0.58,
+                                y: -geo.size.height * 0.34)
+                    Circle()
+                        .fill(Tema.violeta.opacity(0.22))
+                        .frame(width: geo.size.width * 0.54)
+                        .blur(radius: 38)
+                        .offset(x: -geo.size.width * 0.34,
+                                y: geo.size.height * 0.60)
+                    Capsule()
+                        .stroke(.white.opacity(0.10), lineWidth: 1)
+                        .frame(width: geo.size.width * 0.92,
+                               height: geo.size.height * 0.30)
+                        .rotationEffect(.degrees(-18))
+                        .offset(x: geo.size.width * 0.25,
+                                y: -geo.size.height * 0.02)
+                    LinearGradient(colors: [.white.opacity(0.22), .clear],
+                                   startPoint: .topLeading,
+                                   endPoint: UnitPoint(x: 0.46, y: 0.46))
+                }
+            }
         }
         // Holograma iridiscente
         .overlay(alignment: .trailing) {
@@ -108,20 +122,22 @@ struct TarjetaVisual: View {
                                    startPoint: .top, endPoint: .bottom),
                     lineWidth: 1)
         }
+        .shadow(color: Color(hex: tarjeta.colorHex).opacity(0.24),
+                radius: 20, x: 0, y: 12)
     }
 
     // MARK: - Fila superior: logo + banco + contactless
     private var filaSuperior: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(oscurecido(0.5))
-                .frame(width: 26, height: 26)
-                .overlay {
-                    Text(String((tarjeta.banco?.nombre ?? "?").prefix(1)).uppercased())
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 0.5))
+            if let banco = tarjeta.banco {
+                LogoBanco(banco: banco, lado: 28)
+            } else {
+                Image(systemName: "creditcard.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(oscurecido(0.5), in: Circle())
+            }
 
             Text((tarjeta.banco?.nombre ?? "").uppercased())
                 .font(.footnote.weight(.bold))

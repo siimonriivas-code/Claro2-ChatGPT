@@ -26,6 +26,7 @@ struct RaizView: View {
 
     @State private var desbloqueada = false
     @State private var mostrandoBienvenida = false
+    @State private var mostrandoRegistro = false
     @AppStorage("onboardingCompletado") private var onboardingCompletado = false
 
     var body: some View {
@@ -36,9 +37,6 @@ struct RaizView: View {
 
                 CuentasView()
                     .tabItem { Label("Cuentas", systemImage: "creditcard.fill") }
-
-                RegistrarView()
-                    .tabItem { Label("Registrar", systemImage: "plus.circle.fill") }
 
                 PersonasView()
                     .tabItem { Label("Personas", systemImage: "person.2.fill") }
@@ -51,6 +49,23 @@ struct RaizView: View {
             // (con un fundido suave para que no se sienta el golpe)
             .id(montosOcultos)
             .animation(.easeInOut(duration: 0.25), value: montosOcultos)
+            .overlay(alignment: .bottom) {
+                Button {
+                    mostrandoRegistro = true
+                } label: {
+                    Label("Registrar", systemImage: "plus")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .frame(height: 48)
+                        .background(Tema.gradienteAccion, in: Capsule())
+                        .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.8))
+                        .shadow(color: Tema.positivo.opacity(0.30), radius: 16, y: 8)
+                }
+                .buttonStyle(Presionable())
+                .padding(.bottom, 62)
+                .accessibilityHint("Abre las opciones para registrar un movimiento")
+            }
 
             if bloqueoActivado && !desbloqueada {
                 BloqueoView { desbloqueada = true }
@@ -60,7 +75,7 @@ struct RaizView: View {
             // Evita que el selector de apps o una captura de transición
             // expongan saldos mientras Claro no está activo.
             if fase != .active {
-                Tema.fondo.ignoresSafeArea()
+                FondoClaro()
             }
         }
         .aparienciaDeLaApp()
@@ -92,6 +107,11 @@ struct RaizView: View {
                 onboardingCompletado = true
                 mostrandoBienvenida = false
             }
+        }
+        .sheet(isPresented: $mostrandoRegistro) {
+            RegistrarView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 }

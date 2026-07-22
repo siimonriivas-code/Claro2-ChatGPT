@@ -12,21 +12,32 @@ import UIKit
 /// Panel base: el contenedor tipo "tarjeta" con esquinas redondeadas
 /// que usa toda la app.
 struct Panel<Contenido: View>: View {
+    @Environment(\.colorScheme) private var esquema
     @ViewBuilder var contenido: () -> Contenido
 
     var body: some View {
         contenido()
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Tema.panel,
-                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-            )
-            .overlay(
-                // Filo de luz sutil: da el acabado premium en toda la app
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Tema.panelElevado.opacity(0.6), lineWidth: 1)
-            )
+            .background {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Tema.panel)
+                    .overlay {
+                        LinearGradient(
+                            colors: [.white.opacity(esquema == .dark ? 0.035 : 0.55),
+                                     Tema.acento.opacity(0.025), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing)
+                            .clipShape(RoundedRectangle(cornerRadius: 24,
+                                                       style: .continuous))
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(Tema.gradienteBorde, lineWidth: 0.8)
+            }
+            .shadow(color: .black.opacity(esquema == .dark ? 0.22 : 0.07),
+                    radius: 16, x: 0, y: 8)
     }
 }
 
@@ -38,10 +49,11 @@ struct Pildora: View {
     var body: some View {
         Text(texto)
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.18), in: Capsule())
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(color.opacity(0.14), in: Capsule())
             .foregroundStyle(color)
+            .overlay(Capsule().stroke(color.opacity(0.24), lineWidth: 0.7))
     }
 }
 
@@ -51,10 +63,79 @@ struct TituloSeccion: View {
 
     var body: some View {
         Text(texto.uppercased())
-            .font(.caption.weight(.semibold))
+            .font(.caption2.weight(.bold))
+            .tracking(1.25)
             .foregroundStyle(Tema.textoSecundario)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 4)
+            .padding(.top, 7)
+    }
+}
+
+/// Acción protagonista común a toda la app.
+struct BotonPrincipalClaro: View {
+    let titulo: String
+    var subtitulo: String? = nil
+    var icono: String = "plus"
+    let accion: () -> Void
+
+    var body: some View {
+        Button(action: accion) {
+            HStack(spacing: 12) {
+                Image(systemName: icono)
+                    .font(.headline.weight(.bold))
+                    .frame(width: 38, height: 38)
+                    .background(.white.opacity(0.18), in: Circle())
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(titulo).font(.headline)
+                    if let subtitulo {
+                        Text(subtitulo)
+                            .font(.caption)
+                            .opacity(0.78)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .opacity(0.72)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Tema.gradienteAccion,
+                        in: RoundedRectangle(cornerRadius: 20,
+                                             style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(.white.opacity(0.22), lineWidth: 0.8)
+            }
+            .shadow(color: Tema.positivo.opacity(0.20), radius: 18, y: 8)
+        }
+        .buttonStyle(Presionable())
+    }
+}
+
+/// Identificador cromático para métricas y accesos; evita círculos planos.
+struct OrbeClaro: View {
+    let icono: String
+    var color: Color = Tema.acento
+    var lado: CGFloat = 44
+
+    var body: some View {
+        Image(systemName: icono)
+            .font(.system(size: lado * 0.38, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: lado, height: lado)
+            .background(
+                LinearGradient(colors: [color, color.opacity(0.62), Tema.violeta],
+                               startPoint: .topLeading,
+                               endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: lado * 0.34,
+                                     style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: lado * 0.34, style: .continuous)
+                    .strokeBorder(.white.opacity(0.26), lineWidth: 0.8)
+            }
+            .shadow(color: color.opacity(0.26), radius: 12, y: 6)
     }
 }
 

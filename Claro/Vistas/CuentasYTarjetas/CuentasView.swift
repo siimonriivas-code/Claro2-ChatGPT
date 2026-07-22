@@ -78,7 +78,7 @@ struct CuentasView: View {
                 }
                 .padding(16)
             }
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Cuentas")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -141,28 +141,67 @@ struct CuentasView: View {
 
     // MARK: - Resumen
     private var panelResumen: some View {
-        Panel {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("EN CUENTAS")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Tema.textoSecundario)
-                    Text(saldoTotal.comoDinero)
-                        .font(.system(.title2, design: .rounded).weight(.bold))
-                        .foregroundStyle(Tema.positivo)
+        let posicion = saldoTotal - deudaTotalTarjetas
+        return ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [Tema.panelElevado, Tema.panel, Tema.panelProfundo],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
+            Circle()
+                .fill((posicion >= 0 ? Tema.positivo : Tema.urgente).opacity(0.14))
+                .frame(width: 190, height: 190)
+                .blur(radius: 25)
+                .offset(x: 75, y: -90)
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("POSICIÓN NETA")
+                            .font(.caption2.weight(.bold))
+                            .tracking(1.2)
+                            .foregroundStyle(Tema.textoSecundario)
+                        Text(posicion.comoDinero)
+                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                            .monospacedDigit()
+                            .foregroundStyle(posicion >= 0 ? Tema.positivo : Tema.urgente)
+                    }
+                    Spacer()
+                    OrbeClaro(icono: "building.columns.fill",
+                              color: posicion >= 0 ? Tema.positivo : Tema.urgente,
+                              lado: 46)
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("DEUDA TARJETAS")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Tema.textoSecundario)
-                    Text(deudaTotalTarjetas.comoDinero)
-                        .font(.system(.title2, design: .rounded).weight(.bold))
-                        .foregroundStyle(deudaTotalTarjetas > 0
-                                         ? Tema.advertencia : Tema.positivo)
+                HStack(spacing: 0) {
+                    resumenMetrica("EN CUENTAS", saldoTotal, Tema.positivo)
+                    Rectangle()
+                        .fill(Tema.panelElevado)
+                        .frame(width: 1, height: 38)
+                        .padding(.horizontal, 14)
+                    resumenMetrica("DEUDA TARJETAS", deudaTotalTarjetas,
+                                   deudaTotalTarjetas > 0
+                                   ? Tema.advertencia : Tema.positivo)
                 }
             }
+            .padding(20)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .strokeBorder(Tema.gradienteBorde, lineWidth: 0.9))
+        .shadow(color: .black.opacity(0.16), radius: 20, y: 10)
+    }
+
+    private func resumenMetrica(_ titulo: String, _ monto: Double,
+                                _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(titulo)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Tema.textoSecundario)
+            Text(monto.comoDinero)
+                .font(.system(.headline, design: .rounded).weight(.bold))
+                .minimumScaleFactor(0.72)
+                .monospacedDigit()
+                .foregroundStyle(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Un banco: logo, cuentas de débito y su mazo de tarjetas

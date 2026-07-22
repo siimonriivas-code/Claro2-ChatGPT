@@ -56,7 +56,7 @@ struct BienvenidaClaroView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 18)
             }
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Omitir") { terminar() }
@@ -74,12 +74,28 @@ struct BienvenidaClaroView: View {
                                    texto: String) -> some View {
         VStack(spacing: 24) {
             Spacer()
-            Image(systemName: icono)
-                .font(.system(size: 70))
-                .foregroundStyle(Tema.positivo)
+            ZStack {
+                Circle()
+                    .fill(Tema.gradienteMarca)
+                    .frame(width: 148, height: 148)
+                    .blur(radius: 22)
+                    .opacity(0.24)
+                Image(systemName: icono)
+                    .font(.system(size: 64, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 116, height: 116)
+                    .background(Tema.gradienteMarca,
+                                in: RoundedRectangle(cornerRadius: 34,
+                                                     style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 34,
+                                              style: .continuous)
+                        .strokeBorder(.white.opacity(0.30), lineWidth: 1))
+                    .shadow(color: Tema.acento.opacity(0.25), radius: 24, y: 12)
+            }
             Text(titulo)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(.system(size: 38, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
+                .foregroundStyle(Tema.textoPrincipal)
             Text(texto)
                 .font(.body)
                 .foregroundStyle(Tema.textoSecundario)
@@ -124,7 +140,11 @@ struct BienvenidaClaroView: View {
                     .foregroundStyle(Tema.textoSecundario)
             }
             .padding(16)
-            .background(Tema.panel, in: RoundedRectangle(cornerRadius: 16))
+            .background(Tema.panel,
+                        in: RoundedRectangle(cornerRadius: 20,
+                                             style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Tema.gradienteBorde, lineWidth: 0.8))
         }
         .buttonStyle(.plain)
         .disabled(!habilitado)

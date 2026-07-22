@@ -30,25 +30,34 @@ struct PersonasView: View {
                     NavigationLink {
                         GastosCompartidosView()
                     } label: {
-                        Panel {
-                            HStack(spacing: 12) {
-                                Image(systemName: "person.3.sequence.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(Tema.acento)
+                        HStack(spacing: 14) {
+                                OrbeClaro(icono: "person.3.sequence.fill",
+                                          color: Tema.violeta, lado: 48)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("Gastos entre amigos")
+                                    Text("Círculos compartidos")
                                         .font(.headline)
                                         .foregroundStyle(Tema.textoPrincipal)
-                                    Text("Dividir y simplificar deudas · independiente de tus finanzas")
+                                    Text("Divide gastos sin mezclar tus finanzas")
                                         .font(.caption)
                                         .foregroundStyle(Tema.textoSecundario)
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(Tema.textoSecundario)
-                            }
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(Tema.violeta)
                         }
+                        .padding(17)
+                        .background(
+                            LinearGradient(colors: [Tema.violeta.opacity(0.15),
+                                                    Tema.acento.opacity(0.08),
+                                                    Tema.panel],
+                                           startPoint: .topLeading,
+                                           endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 24,
+                                                 style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 24,
+                                                  style: .continuous)
+                            .strokeBorder(Tema.violeta.opacity(0.24), lineWidth: 0.8))
                     }
                     .buttonStyle(Presionable())
 
@@ -109,7 +118,7 @@ struct PersonasView: View {
                 }
                 .padding(16)
             }
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Personas")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -130,13 +139,15 @@ struct PersonasView: View {
         Panel {
             HStack(spacing: 12) {
                 Circle()
-                    .fill(Color(hex: persona.colorHex))
+                    .fill(Tema.gradienteTarjeta(hex: persona.colorHex))
                     .frame(width: 42, height: 42)
                     .overlay {
                         Text(persona.inicial)
                             .font(.headline)
                             .foregroundStyle(.white)
                     }
+                    .shadow(color: Color(hex: persona.colorHex).opacity(0.24),
+                            radius: 8, y: 4)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(persona.nombre)
                         .font(.headline)

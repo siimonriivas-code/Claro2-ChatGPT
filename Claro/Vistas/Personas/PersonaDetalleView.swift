@@ -164,7 +164,7 @@ struct PersonaDetalleView: View {
             }
             .padding(16)
         }
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle(persona.nombre)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

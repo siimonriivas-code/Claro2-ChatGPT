@@ -27,8 +27,9 @@ struct NuevaTarjetaView: View {
     @State private var colorHex = "004481"
 
     private let coloresDisponibles: [String] =
-        ["004481", "EB0029", "820AD1", "6C8CFF",
-         "4ADE9C", "F5B14C", "FF8CC8", "1C2230"]
+        ["004481", "EB0029", "820AD1", "0E7490",
+         "0F9D7A", "3D5AFE", "7C3AED", "C026D3",
+         "E11D48", "EA580C", "D4A017", "172033"]
 
     private var puedeGuardar: Bool {
         !nombre.trimmingCharacters(in: .whitespaces).isEmpty
@@ -84,7 +85,7 @@ struct NuevaTarjetaView: View {
                               spacing: 14) {
                         ForEach(coloresDisponibles, id: \.self) { hex in
                             Circle()
-                                .fill(Color(hex: hex))
+                                .fill(Tema.gradienteTarjeta(hex: hex))
                                 .frame(width: 40, height: 40)
                                 .overlay {
                                     if colorHex == hex {
@@ -104,7 +105,7 @@ struct NuevaTarjetaView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Nueva tarjeta")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -131,6 +132,6 @@ struct NuevaTarjetaView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }

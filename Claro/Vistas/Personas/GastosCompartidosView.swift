@@ -58,7 +58,7 @@ struct GastosCompartidosView: View {
             }
             .padding(16)
         }
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle("Gastos entre amigos")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -265,7 +265,7 @@ private struct GrupoGastosDetalleView: View {
             }
             .padding(16)
         }
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle(grupo.nombre)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

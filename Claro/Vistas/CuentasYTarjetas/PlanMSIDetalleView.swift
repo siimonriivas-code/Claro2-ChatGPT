@@ -184,7 +184,7 @@ struct PlanMSIDetalleView: View {
             }
             .padding(16)
         }
-        .background(Tema.fondo.ignoresSafeArea())
+        .background(FondoClaro())
         .navigationTitle("Plan MSI")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Pago final congelado", isPresented: $mostrandoCongelado) {

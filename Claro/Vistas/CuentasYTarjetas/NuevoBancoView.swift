@@ -19,9 +19,10 @@ struct NuevoBancoView: View {
 
     private let coloresDisponibles: [(nombre: String, hex: String)] = [
         ("BBVA",    "004481"), ("Banorte", "EB0029"),
-        ("Nu",      "820AD1"), ("Azul",    "6C8CFF"),
-        ("Verde",   "4ADE9C"), ("Ámbar",   "F5B14C"),
-        ("Rosa",    "FF8CC8"), ("Dorado",  "D9A66C")
+        ("Nu",      "820AD1"), ("Océano",  "0E7490"),
+        ("Menta",   "0F9D7A"), ("Cobalto", "3D5AFE"),
+        ("Violeta", "7C3AED"), ("Magenta", "C026D3"),
+        ("Coral",   "E11D48"), ("Cobre",   "EA580C")
     ]
 
     var body: some View {
@@ -36,7 +37,7 @@ struct NuevoBancoView: View {
                               spacing: 14) {
                         ForEach(coloresDisponibles, id: \.hex) { color in
                             Circle()
-                                .fill(Color(hex: color.hex))
+                                .fill(Tema.gradienteTarjeta(hex: color.hex))
                                 .frame(width: 40, height: 40)
                                 .overlay {
                                     if colorHex == color.hex {
@@ -56,7 +57,7 @@ struct NuevoBancoView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Tema.fondo.ignoresSafeArea())
+            .background(FondoClaro())
             .navigationTitle("Nuevo banco")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -74,6 +75,6 @@ struct NuevoBancoView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .aparienciaDeLaApp()
     }
 }
