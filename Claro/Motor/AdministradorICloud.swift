@@ -22,6 +22,7 @@ enum AdministradorICloud {
         case cuentaNoDisponible
         case respaldoInexistente
         case archivoInvalido
+        case sinDatosDelUsuario
 
         var errorDescription: String? {
             switch self {
@@ -31,6 +32,8 @@ enum AdministradorICloud {
                 "Todavía no existe un respaldo de Claro en tu iCloud."
             case .archivoInvalido:
                 "El respaldo de iCloud está incompleto o no se puede leer."
+            case .sinDatosDelUsuario:
+                "Claro no reemplazó el respaldo de iCloud porque esta base local no contiene todavía información financiera."
             }
         }
     }
@@ -46,6 +49,11 @@ enum AdministradorICloud {
         }
 
         let respaldo = try AdministradorRespaldos.crear(contexto: contexto)
+        guard contieneDatosDelUsuario(respaldo) else {
+            // Protección anti-base-vacía: una instalación recién abierta o
+            // una base equivocada jamás puede pisar un respaldo útil.
+            throw ErrorICloud.sinDatosDelUsuario
+        }
         let datos = try AdministradorRespaldos.codificar(respaldo)
         let archivo = FileManager.default.temporaryDirectory
             .appendingPathComponent("Claro-\(UUID().uuidString).claro")
@@ -119,5 +127,18 @@ enum AdministradorICloud {
         } catch let error as CKError where error.code == .unknownItem {
             return nil
         }
+    }
+
+    private static func contieneDatosDelUsuario(_ respaldo: RespaldoClaro) -> Bool {
+        !respaldo.bancos.isEmpty
+            || !respaldo.cuentas.isEmpty
+            || !respaldo.tarjetas.isEmpty
+            || !respaldo.personas.isEmpty
+            || !respaldo.deudas.isEmpty
+            || !respaldo.estados.isEmpty
+            || !respaldo.movimientos.isEmpty
+            || !(respaldo.ingresosRecurrentes?.isEmpty ?? true)
+            || !(respaldo.conversaciones?.isEmpty ?? true)
+            || !(respaldo.gruposGastos?.isEmpty ?? true)
     }
 }
