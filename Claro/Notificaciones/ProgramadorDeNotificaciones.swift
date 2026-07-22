@@ -26,9 +26,11 @@ enum ProgramadorDeNotificaciones {
     }
 
     /// Pide permiso al sistema para enviar notificaciones (solo la 1a vez).
-    static func pedirPermiso() {
+    static func pedirPermiso(alResponder: ((Bool) -> Void)? = nil) {
         UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+            .requestAuthorization(options: [.alert, .sound, .badge]) { autorizado, _ in
+                DispatchQueue.main.async { alResponder?(autorizado) }
+            }
     }
 
     /// Borra todo lo programado y vuelve a programar según la realidad
@@ -208,11 +210,20 @@ enum ProgramadorDeNotificaciones {
                 [.year, .month, .day, .hour, .minute, .second],
                 from: fechaDisparo)
         }
-        guard fechaDisparo > .now else { return }
+        if fechaDisparo <= .now {
+            // Los importes se conocen al importar el PDF. Si el estado acaba
+            // de entrar, entregamos su resumen inmediatamente.
+            guard let registrado = estado.registradoEl,
+                  Date.now.timeIntervalSince(registrado) < 10 * 60 else { return }
+            fechaDisparo = Date.now.addingTimeInterval(5)
+            componentes = calendario.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: fechaDisparo)
+        }
 
         let resumen = desgloseFamiliar(estado: estado, tarjeta: tarjeta)
         let contenido = UNMutableNotificationContent()
-        contenido.title = "✂️ Ya cortó \(tarjeta.nombre)"
+        contenido.title = "✂️ Resumen de \(tarjeta.nombre)"
         contenido.body = "Saldo total \(montoVisible(estado.saldoAlCorte)). Para no generar intereses: tú \(montoVisible(resumen.parteUsuario)); familia \(montoVisible(resumen.parteFamilia))\(resumen.detalle.isEmpty ? "" : " (\(resumen.detalle))")."
         contenido.sound = .default
 
@@ -250,16 +261,18 @@ enum ProgramadorDeNotificaciones {
     }
 
     private static func montoVisible(_ monto: Double) -> String {
-        UserDefaults.standard.bool(forKey: "montosOcultos")
+        let ocultar = UserDefaults.standard.bool(forKey: "montosOcultos")
+            || !UserDefaults.standard.bool(forKey: "mostrarMontosEnNotificaciones")
+        return ocultar
             ? "••••" : monto.comoDinero
     }
 
     private static func identificadorPago(tarjeta: TarjetaCredito,
                                           dias: Int) -> String {
-        "pago-\(tarjeta.nombre)-\(dias)"
+        "pago-\(tarjeta.identificadorNotificaciones)-\(dias)"
     }
 
     private static func identificadorCorte(tarjeta: TarjetaCredito) -> String {
-        "corte-\(tarjeta.nombre)"
+        "corte-\(tarjeta.identificadorNotificaciones)"
     }
 }

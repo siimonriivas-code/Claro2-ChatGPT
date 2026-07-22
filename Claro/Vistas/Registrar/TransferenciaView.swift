@@ -13,7 +13,7 @@ struct TransferenciaView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
 
-    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
 
     @State private var monto: Double?
     @State private var origen: CuentaBancaria?

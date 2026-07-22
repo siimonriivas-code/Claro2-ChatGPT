@@ -22,17 +22,16 @@ enum MotorFusionCuentas {
             throw ErrorFusionCuentas.bancosDiferentes
         }
 
+        // Conservamos una foto exacta del dinero combinado. Sumar dos saldos
+        // iniciales es incorrecto cuando fueron capturados en fechas que se
+        // traslapan; la nueva foto evita duplicar movimientos históricos.
+        let saldoCombinado = (origen.saldoCalculado + destino.saldoCalculado)
+            .redondeadoAMoneda
+
         // Copias estables: al reasignar relaciones SwiftData modifica las
         // colecciones de ambas cuentas inmediatamente.
         let movimientosQueSalen = Array(origen.movimientos)
         let transferenciasQueLlegan = Array(origen.movimientosEntrantes)
-
-        // Los saldos iniciales también forman parte del dinero real. Al sumar
-        // ambos y conservar la fecha más antigua, el saldo combinado no cambia.
-        destino.saldoInicial = (destino.saldoInicial + origen.saldoInicial)
-            .redondeadoAMoneda
-        destino.fechaSaldoInicial = min(destino.fechaSaldoInicial,
-                                        origen.fechaSaldoInicial)
 
         for movimiento in movimientosQueSalen {
             if movimiento.tipo == .transferencia,
@@ -57,7 +56,9 @@ enum MotorFusionCuentas {
             }
         }
 
-        contexto.delete(origen)
+        destino.saldoInicial = saldoCombinado
+        destino.fechaSaldoInicial = .now
+        origen.archivada = true
         try contexto.save()
     }
 

@@ -14,11 +14,11 @@ import SwiftData
 struct DashboardView: View {
     @Environment(\.colorScheme) private var esquemaActual
 
-    @Query private var cuentas: [CuentaBancaria]
-    @Query private var tarjetas: [TarjetaCredito]
-    @Query private var personas: [Persona]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }) private var tarjetas: [TarjetaCredito]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }) private var personas: [Persona]
     @Query private var planes: [PlanMSI]
-    @Query private var deudas: [Deuda]
+    @Query(filter: #Predicate<Deuda> { !$0.archivada }) private var deudas: [Deuda]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
     @AppStorage("apariencia") private var apariencia = Apariencia.oscuro.rawValue
@@ -189,7 +189,7 @@ struct DashboardView: View {
                 Divider().overlay(Tema.panelElevado)
 
                 HStack {
-                    Text("Disponible real después de tarjetas")
+                    Text("Disponible después de apartar cortes")
                         .font(.footnote)
                         .foregroundStyle(Tema.textoSecundario)
                     Spacer()

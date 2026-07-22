@@ -21,6 +21,7 @@ final class Deuda {
     var cat: Double? = nil
     var plazoMeses: Int? = nil
     var mensualidad: Double? = nil
+    var archivada: Bool = false
 
     // Abonos registrados (movimientos tipo abonoDeuda)
     @Relationship(inverse: \Movimiento.deuda)

@@ -12,10 +12,50 @@ final class GrupoGastosCompartidos {
     @Relationship(deleteRule: .cascade, inverse: \GastoCompartidoIndependiente.grupo)
     var gastos: [GastoCompartidoIndependiente] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \LiquidacionGastoIndependiente.grupo)
+    var liquidaciones: [LiquidacionGastoIndependiente] = []
+
     init(nombre: String, fecha: Date = .now) {
         self.nombre = nombre
         self.fecha = fecha
         self.creadoEl = .now
+    }
+}
+
+/// Un pago entre participantes del módulo independiente. Nunca crea un
+/// Movimiento ni toca una cuenta o tarjeta de Claro.
+@Model
+final class LiquidacionGastoIndependiente {
+    var monto: Double
+    var fecha: Date
+    var pagadorEsUsuario: Bool
+    var pagadorNombreGuardado: String
+    var receptorEsUsuario: Bool
+    var receptorNombreGuardado: String
+    @Relationship(deleteRule: .nullify) var pagador: Persona?
+    @Relationship(deleteRule: .nullify) var receptor: Persona?
+    var grupo: GrupoGastosCompartidos?
+
+    init(monto: Double, fecha: Date = .now,
+         pagadorEsUsuario: Bool, pagador: Persona?, pagadorNombreGuardado: String,
+         receptorEsUsuario: Bool, receptor: Persona?, receptorNombreGuardado: String,
+         grupo: GrupoGastosCompartidos?) {
+        self.monto = monto.redondeadoAMoneda
+        self.fecha = fecha
+        self.pagadorEsUsuario = pagadorEsUsuario
+        self.pagador = pagador
+        self.pagadorNombreGuardado = pagadorNombreGuardado
+        self.receptorEsUsuario = receptorEsUsuario
+        self.receptor = receptor
+        self.receptorNombreGuardado = receptorNombreGuardado
+        self.grupo = grupo
+    }
+
+    var nombrePagador: String {
+        pagadorEsUsuario ? "Tú" : (pagador?.nombre ?? pagadorNombreGuardado)
+    }
+    var nombreReceptor: String {
+        receptorEsUsuario ? "Tú" : (receptor?.nombre ?? receptorNombreGuardado)
     }
 }
 

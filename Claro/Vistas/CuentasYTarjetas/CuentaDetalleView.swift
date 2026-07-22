@@ -18,12 +18,39 @@ struct CuentaDetalleView: View {
 
     @State private var mostrandoEdicion = false
     @State private var mostrandoFusion = false
+    @State private var mostrandoComprobacion = false
     @State private var mostrandoImportacion = false
     @State private var confirmandoEliminacion = false
+    @State private var filtro: FiltroMovimientosCuenta = .todos
+    @State private var busqueda = ""
 
     private var movimientosOrdenados: [Movimiento] {
-        (cuenta.movimientos + cuenta.movimientosEntrantes)
+        let inicioHoy = Calendar.current.startOfDay(for: FechaAnalisisClaro.actual)
+        let inicioManana = Calendar.current.date(
+            byAdding: .day, value: 1, to: inicioHoy) ?? FechaAnalisisClaro.actual
+        let todos = (cuenta.movimientos + cuenta.movimientosEntrantes)
             .sorted { $0.fecha > $1.fecha }
+        let filtrados = todos.filter { movimiento in
+            switch filtro {
+            case .todos:
+                return movimiento.fecha < inicioManana
+            case .entradas:
+                return movimiento.cuentaDestino === cuenta
+                    || [.ingreso, .cobroRecibido, .bonificacion].contains(movimiento.tipo)
+            case .salidas:
+                return movimiento.cuenta === cuenta
+                    && [.gasto, .pagoTarjeta, .transferencia, .abonoDeuda].contains(movimiento.tipo)
+            case .programados:
+                return movimiento.fecha >= inicioManana
+            }
+        }
+        guard !busqueda.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return filtrados
+        }
+        return filtrados.filter {
+            $0.detalle.localizedCaseInsensitiveContains(busqueda)
+                || $0.tipo.rawValue.localizedCaseInsensitiveContains(busqueda)
+        }
     }
 
     var body: some View {
@@ -46,11 +73,21 @@ struct CuentaDetalleView: View {
 
                 TituloSeccion(texto: "Movimientos")
 
-                Button { mostrandoImportacion = true } label: {
-                    Label("Importar estado de cuenta (PDF)", systemImage: "doc.text.viewfinder")
+                Button { mostrandoComprobacion = true } label: {
+                    Label("Comprobar saldo con el banco", systemImage: "checkmark.seal")
                         .frame(maxWidth: .infinity).padding(.vertical, 11)
                 }
                 .buttonStyle(.borderedProminent).tint(Tema.acento)
+
+                Picker("Filtro", selection: $filtro) {
+                    ForEach(FiltroMovimientosCuenta.allCases) { opcion in
+                        Text(opcion.rawValue).tag(opcion)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                TextField("Buscar movimiento", text: $busqueda)
+                    .textFieldStyle(.roundedBorder)
 
                 if movimientosOrdenados.isEmpty {
                     Panel {
@@ -93,11 +130,17 @@ struct CuentaDetalleView: View {
                         Label("Fusionar con otra cuenta",
                               systemImage: "arrow.triangle.merge")
                     }
+                    Button {
+                        mostrandoImportacion = true
+                    } label: {
+                        Label("Importar movimientos desde PDF (avanzado)",
+                              systemImage: "doc.text.viewfinder")
+                    }
                     Divider()
                     Button(role: .destructive) {
                         confirmandoEliminacion = true
                     } label: {
-                        Label("Eliminar cuenta", systemImage: "trash")
+                        Label("Archivar cuenta", systemImage: "archivebox")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -115,33 +158,31 @@ struct CuentaDetalleView: View {
         .sheet(isPresented: $mostrandoImportacion) {
             ImportarEstadoDebitoView(cuenta: cuenta)
         }
+        .sheet(isPresented: $mostrandoComprobacion) {
+            ComprobarSaldoCuentaView(cuenta: cuenta)
         }
-        .confirmationDialog("¿Eliminar esta cuenta?",
+        }
+        .confirmationDialog("¿Archivar esta cuenta?",
                             isPresented: $confirmandoEliminacion,
                             titleVisibility: .visible) {
-            Button("Sí, eliminar cuenta y sus \(cuenta.movimientos.count) movimientos",
-                   role: .destructive) { eliminarCuenta() }
+            Button("Archivar y conservar el historial") { archivarCuenta() }
             Button("No", role: .cancel) { }
         } message: {
-            Text("Se eliminará la cuenta y todos sus movimientos (con sus divisiones de dueños). Esta acción no se puede deshacer.")
+            Text("Dejará de aparecer y no podrá usarse en operaciones nuevas. Sus movimientos y su efecto histórico se conservarán.")
         }
     }
 
-    private func eliminarCuenta() {
-        // Movimientos donde esta cuenta es la principal: fuera, con limpieza
-        for movimiento in cuenta.movimientos {
-            if let compartida = movimiento.compraCompartida {
-                for parte in compartida.participaciones { contexto.delete(parte) }
-                movimiento.compraCompartida = nil
-                contexto.delete(compartida)
-            }
-            contexto.delete(movimiento)   // su bitácora se va en cascada
-        }
-        // Transferencias que le llegaban: quedan como salidas sin destino
-        for movimiento in cuenta.movimientosEntrantes {
-            movimiento.cuentaDestino = nil
-        }
-        contexto.delete(cuenta)
+    private func archivarCuenta() {
+        cuenta.archivada = true
+        try? contexto.save()
         cerrar()
     }
+}
+
+private enum FiltroMovimientosCuenta: String, CaseIterable, Identifiable {
+    case todos = "Todos"
+    case entradas = "Entradas"
+    case salidas = "Salidas"
+    case programados = "Futuros"
+    var id: String { rawValue }
 }

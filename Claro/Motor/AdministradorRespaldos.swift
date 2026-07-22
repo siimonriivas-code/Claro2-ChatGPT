@@ -9,7 +9,7 @@ import Foundation
 import SwiftData
 
 struct RespaldoClaro: Codable {
-    var version: Int = 2
+    var version: Int = 3
     var creadoEl: Date = .now
     var bancos: [BancoDTO]
     var categorias: [CategoriaDTO]
@@ -27,6 +27,7 @@ struct RespaldoClaro: Codable {
     var ocurrenciasIngreso: [OcurrenciaIngresoDTO]? = nil
     var conversaciones: [ConversacionDTO]? = nil
     var conciliaciones: [ConciliacionDTO]? = nil
+    var gruposGastos: [GrupoGastosDTO]? = nil
     var preferencias: PreferenciasDTO
 
     var totalRegistros: Int {
@@ -37,6 +38,11 @@ struct RespaldoClaro: Codable {
             + (ingresosRecurrentes?.count ?? 0) + (ocurrenciasIngreso?.count ?? 0)
             + (conversaciones?.reduce(0) { $0 + 1 + $1.mensajes.count } ?? 0)
             + (conciliaciones?.count ?? 0)
+            + (gruposGastos?.reduce(0) {
+                $0 + 1 + $1.gastos.count
+                    + $1.gastos.reduce(0) { $0 + $1.partes.count }
+                    + $1.liquidaciones.count
+            } ?? 0)
     }
 }
 
@@ -47,18 +53,43 @@ struct CategoriaDTO: Codable {
 struct CuentaDTO: Codable {
     let id: UUID; let bancoID: UUID?; let nombre, tipoRaw: String
     let saldoInicial: Double; let fechaSaldoInicial: Date
+    var archivada: Bool? = nil
 }
 struct TarjetaDTO: Codable {
     let id: UUID; let bancoID: UUID?; let nombre, ultimosDigitos, colorHex: String
     let limiteCredito: Double; let diaCorte, diaLimitePago: Int
     let saldoInicial: Double; let fechaSaldoInicial: Date
     let tasaAnual, cat: Double?
+    var archivada: Bool? = nil
+    var identificadorNotificaciones: String? = nil
 }
-struct PersonaDTO: Codable { let id: UUID; let nombre, colorHex: String }
+struct PersonaDTO: Codable {
+    let id: UUID; let nombre, colorHex: String
+    var archivada: Bool? = nil
+}
 struct DeudaDTO: Codable {
     let id: UUID; let acreedor: String; let montoOriginal: Double
     let fecha: Date; let notas: String
     let tasaAnual, cat: Double?; let plazoMeses: Int?; let mensualidad: Double?
+    var archivada: Bool? = nil
+}
+struct GrupoGastosDTO: Codable {
+    struct ParteDTO: Codable {
+        let personaID: UUID?; let esUsuario: Bool
+        let personaNombreGuardado: String; let monto: Double
+    }
+    struct GastoDTO: Codable {
+        let id: UUID; let concepto: String; let monto: Double; let fecha: Date
+        let pagadorEsUsuario: Bool; let pagadorID: UUID?
+        let pagadorNombreGuardado: String; let partes: [ParteDTO]
+    }
+    struct LiquidacionDTO: Codable {
+        let monto: Double; let fecha: Date
+        let pagadorEsUsuario: Bool; let pagadorID: UUID?; let pagadorNombreGuardado: String
+        let receptorEsUsuario: Bool; let receptorID: UUID?; let receptorNombreGuardado: String
+    }
+    let id: UUID; let nombre: String; let fecha, creadoEl: Date
+    let gastos: [GastoDTO]; let liquidaciones: [LiquidacionDTO]
 }
 struct IngresoRecurrenteDTO: Codable {
     let id: UUID; let cuentaID: UUID?; let nombre: String; let montoEsperado: Double
@@ -125,6 +156,7 @@ struct PreferenciasDTO: Codable {
     let planificacionJSON: Data?
     var modoHistoricoActivo: Bool? = nil
     var fechaAnalisisReferencia: Double? = nil
+    var mostrarMontosEnNotificaciones: Bool? = nil
 }
 
 enum AdministradorRespaldos {
@@ -144,6 +176,7 @@ enum AdministradorRespaldos {
         let ocurrencias = try contexto.fetch(FetchDescriptor<OcurrenciaIngresoRecurrente>())
         let conversaciones = try contexto.fetch(FetchDescriptor<ConversacionFinanciera>())
         let conciliaciones = try contexto.fetch(FetchDescriptor<ConciliacionCuentaBancaria>())
+        let gruposGastos = try contexto.fetch(FetchDescriptor<GrupoGastosCompartidos>())
 
         let bancoID = ids(bancos)
         let categoriaID = ids(categorias)
@@ -156,6 +189,7 @@ enum AdministradorRespaldos {
         let mensualidadID = ids(mensualidades)
         let movimientoID = ids(movimientos)
         let ingresoID = ids(ingresos)
+        let grupoGastoID = ids(gruposGastos)
 
         let preferencias = UserDefaults.standard
         return RespaldoClaro(
@@ -169,7 +203,8 @@ enum AdministradorRespaldos {
                 id: cuentaID[$0.persistentModelID]!,
                 bancoID: referencia($0.banco, en: bancoID), nombre: $0.nombre,
                 tipoRaw: $0.tipoRaw, saldoInicial: $0.saldoInicial,
-                fechaSaldoInicial: $0.fechaSaldoInicial) },
+                fechaSaldoInicial: $0.fechaSaldoInicial,
+                archivada: $0.archivada) },
             tarjetas: tarjetas.map { TarjetaDTO(
                 id: tarjetaID[$0.persistentModelID]!,
                 bancoID: referencia($0.banco, en: bancoID), nombre: $0.nombre,
@@ -177,13 +212,17 @@ enum AdministradorRespaldos {
                 limiteCredito: $0.limiteCredito, diaCorte: $0.diaCorte,
                 diaLimitePago: $0.diaLimitePago, saldoInicial: $0.saldoInicial,
                 fechaSaldoInicial: $0.fechaSaldoInicial,
-                tasaAnual: $0.tasaAnual, cat: $0.cat) },
+                tasaAnual: $0.tasaAnual, cat: $0.cat,
+                archivada: $0.archivada,
+                identificadorNotificaciones: $0.identificadorNotificaciones) },
             personas: personas.map { PersonaDTO(id: personaID[$0.persistentModelID]!,
-                nombre: $0.nombre, colorHex: $0.colorHex) },
+                nombre: $0.nombre, colorHex: $0.colorHex,
+                archivada: $0.archivada) },
             deudas: deudas.map { DeudaDTO(id: deudaID[$0.persistentModelID]!,
                 acreedor: $0.acreedor, montoOriginal: $0.montoOriginal,
                 fecha: $0.fecha, notas: $0.notas, tasaAnual: $0.tasaAnual,
-                cat: $0.cat, plazoMeses: $0.plazoMeses, mensualidad: $0.mensualidad) },
+                cat: $0.cat, plazoMeses: $0.plazoMeses, mensualidad: $0.mensualidad,
+                archivada: $0.archivada) },
             estados: estados.map { EstadoDTO(id: estadoID[$0.persistentModelID]!,
                 tarjetaID: referencia($0.tarjeta, en: tarjetaID),
                 fechaCorte: $0.fechaCorte, fechaLimitePago: $0.fechaLimitePago,
@@ -263,6 +302,29 @@ enum AdministradorRespaldos {
                 saldoCalculadoAlImportar: $0.saldoCalculadoAlImportar,
                 movimientosImportados: $0.movimientosImportados,
                 importacionID: $0.importacionID, creadaEl: $0.creadaEl) },
+            gruposGastos: gruposGastos.map { grupo in GrupoGastosDTO(
+                id: grupoGastoID[grupo.persistentModelID]!,
+                nombre: grupo.nombre, fecha: grupo.fecha, creadoEl: grupo.creadoEl,
+                gastos: grupo.gastos.map { gasto in GrupoGastosDTO.GastoDTO(
+                    id: UUID(), concepto: gasto.concepto, monto: gasto.monto,
+                    fecha: gasto.fecha, pagadorEsUsuario: gasto.pagadorEsUsuario,
+                    pagadorID: referencia(gasto.pagador, en: personaID),
+                    pagadorNombreGuardado: gasto.pagadorNombreGuardado,
+                    partes: gasto.partes.map { parte in GrupoGastosDTO.ParteDTO(
+                        personaID: referencia(parte.persona, en: personaID),
+                        esUsuario: parte.esUsuario,
+                        personaNombreGuardado: parte.personaNombreGuardado,
+                        monto: parte.monto) }) },
+                liquidaciones: grupo.liquidaciones.map { pago in
+                    GrupoGastosDTO.LiquidacionDTO(
+                        monto: pago.monto, fecha: pago.fecha,
+                        pagadorEsUsuario: pago.pagadorEsUsuario,
+                        pagadorID: referencia(pago.pagador, en: personaID),
+                        pagadorNombreGuardado: pago.pagadorNombreGuardado,
+                        receptorEsUsuario: pago.receptorEsUsuario,
+                        receptorID: referencia(pago.receptor, en: personaID),
+                        receptorNombreGuardado: pago.receptorNombreGuardado)
+                }) },
             preferencias: PreferenciasDTO(
                 bloqueoActivado: preferencias.bool(forKey: "bloqueoActivado"),
                 notificacionesActivadas: preferencias.bool(forKey: "notificacionesActivadas"),
@@ -272,7 +334,9 @@ enum AdministradorRespaldos {
                     ?? Apariencia.oscuro.rawValue,
                 planificacionJSON: preferencias.data(forKey: "planificacionClaro"),
                 modoHistoricoActivo: preferencias.bool(forKey: "modoHistoricoActivo"),
-                fechaAnalisisReferencia: preferencias.double(forKey: "fechaAnalisisReferencia")))
+                fechaAnalisisReferencia: preferencias.double(forKey: "fechaAnalisisReferencia"),
+                mostrarMontosEnNotificaciones:
+                    preferencias.bool(forKey: "mostrarMontosEnNotificaciones")))
     }
 
     static func codificar(_ respaldo: RespaldoClaro) throws -> Data {
@@ -286,7 +350,7 @@ enum AdministradorRespaldos {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let respaldo = try decoder.decode(RespaldoClaro.self, from: datos)
-        guard (1...2).contains(respaldo.version) else { throw ErrorRespaldo.versionNoCompatible }
+        guard (1...3).contains(respaldo.version) else { throw ErrorRespaldo.versionNoCompatible }
         return respaldo
     }
 
@@ -316,6 +380,7 @@ enum AdministradorRespaldos {
         }
         for dto in respaldo.personas {
             let modelo = Persona(nombre: dto.nombre, colorHex: dto.colorHex)
+            modelo.archivada = dto.archivada ?? false
             contexto.insert(modelo); personas[dto.id] = modelo
         }
         for dto in respaldo.deudas {
@@ -323,6 +388,7 @@ enum AdministradorRespaldos {
                                fecha: dto.fecha, notas: dto.notas,
                                tasaAnual: dto.tasaAnual, cat: dto.cat,
                                plazoMeses: dto.plazoMeses, mensualidad: dto.mensualidad)
+            modelo.archivada = dto.archivada ?? false
             contexto.insert(modelo); deudas[dto.id] = modelo
         }
         for dto in respaldo.cuentas {
@@ -330,6 +396,7 @@ enum AdministradorRespaldos {
                 tipo: TipoCuenta(rawValue: dto.tipoRaw) ?? .debito,
                 saldoInicial: dto.saldoInicial, fechaSaldoInicial: dto.fechaSaldoInicial,
                 banco: dto.bancoID.flatMap { bancos[$0] })
+            modelo.archivada = dto.archivada ?? false
             contexto.insert(modelo); cuentas[dto.id] = modelo
         }
         for dto in respaldo.tarjetas {
@@ -339,6 +406,11 @@ enum AdministradorRespaldos {
                 saldoInicial: dto.saldoInicial, fechaSaldoInicial: dto.fechaSaldoInicial,
                 colorHex: dto.colorHex, banco: dto.bancoID.flatMap { bancos[$0] },
                 tasaAnual: dto.tasaAnual, cat: dto.cat)
+            modelo.archivada = dto.archivada ?? false
+            if let identificador = dto.identificadorNotificaciones,
+               !identificador.isEmpty {
+                modelo.identificadorNotificaciones = identificador
+            }
             contexto.insert(modelo); tarjetas[dto.id] = modelo
         }
         for dto in respaldo.estados {
@@ -447,6 +519,40 @@ enum AdministradorRespaldos {
                 movimientosImportados: dto.movimientosImportados, importacionID: dto.importacionID)
             modelo.creadaEl = dto.creadaEl; contexto.insert(modelo)
         }
+        for dto in respaldo.gruposGastos ?? [] {
+            let grupo = GrupoGastosCompartidos(nombre: dto.nombre, fecha: dto.fecha)
+            grupo.creadoEl = dto.creadoEl
+            contexto.insert(grupo)
+            for gastoDTO in dto.gastos {
+                let gasto = GastoCompartidoIndependiente(
+                    concepto: gastoDTO.concepto, monto: gastoDTO.monto,
+                    fecha: gastoDTO.fecha,
+                    pagadorEsUsuario: gastoDTO.pagadorEsUsuario,
+                    pagador: gastoDTO.pagadorID.flatMap { personas[$0] },
+                    pagadorNombreGuardado: gastoDTO.pagadorNombreGuardado,
+                    grupo: grupo)
+                contexto.insert(gasto)
+                for parteDTO in gastoDTO.partes {
+                    contexto.insert(ParteGastoIndependiente(
+                        monto: parteDTO.monto,
+                        esUsuario: parteDTO.esUsuario,
+                        persona: parteDTO.personaID.flatMap { personas[$0] },
+                        personaNombreGuardado: parteDTO.personaNombreGuardado,
+                        gasto: gasto))
+                }
+            }
+            for pagoDTO in dto.liquidaciones {
+                contexto.insert(LiquidacionGastoIndependiente(
+                    monto: pagoDTO.monto, fecha: pagoDTO.fecha,
+                    pagadorEsUsuario: pagoDTO.pagadorEsUsuario,
+                    pagador: pagoDTO.pagadorID.flatMap { personas[$0] },
+                    pagadorNombreGuardado: pagoDTO.pagadorNombreGuardado,
+                    receptorEsUsuario: pagoDTO.receptorEsUsuario,
+                    receptor: pagoDTO.receptorID.flatMap { personas[$0] },
+                    receptorNombreGuardado: pagoDTO.receptorNombreGuardado,
+                    grupo: grupo))
+            }
+        }
 
         try contexto.save()
         aplicar(respaldo.preferencias)
@@ -472,6 +578,10 @@ enum AdministradorRespaldos {
     }
 
     private static func eliminarActuales(contexto: ModelContext) throws {
+        for modelo in try contexto.fetch(FetchDescriptor<LiquidacionGastoIndependiente>()) { contexto.delete(modelo) }
+        for modelo in try contexto.fetch(FetchDescriptor<ParteGastoIndependiente>()) { contexto.delete(modelo) }
+        for modelo in try contexto.fetch(FetchDescriptor<GastoCompartidoIndependiente>()) { contexto.delete(modelo) }
+        for modelo in try contexto.fetch(FetchDescriptor<GrupoGastosCompartidos>()) { contexto.delete(modelo) }
         for modelo in try contexto.fetch(FetchDescriptor<MensajeFinanciero>()) { contexto.delete(modelo) }
         for modelo in try contexto.fetch(FetchDescriptor<ConversacionFinanciera>()) { contexto.delete(modelo) }
         for modelo in try contexto.fetch(FetchDescriptor<OcurrenciaIngresoRecurrente>()) { contexto.delete(modelo) }
@@ -506,6 +616,9 @@ enum AdministradorRespaldos {
         }
         if let valor = preferencias.fechaAnalisisReferencia {
             defaults.set(valor, forKey: "fechaAnalisisReferencia")
+        }
+        if let valor = preferencias.mostrarMontosEnNotificaciones {
+            defaults.set(valor, forKey: "mostrarMontosEnNotificaciones")
         }
     }
 }

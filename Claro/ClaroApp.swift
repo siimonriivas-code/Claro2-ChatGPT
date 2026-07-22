@@ -37,7 +37,8 @@ struct ClaroApp: App {
             ConciliacionCuentaBancaria.self,
             GrupoGastosCompartidos.self,
             GastoCompartidoIndependiente.self,
-            ParteGastoIndependiente.self
+            ParteGastoIndependiente.self,
+            LiquidacionGastoIndependiente.self
         ])
     }
 }

@@ -22,6 +22,8 @@ final class CuentaBancaria {
     var tipoRaw: String                // se guarda como texto (más estable)
     var saldoInicial: Double           // punto de partida
     var fechaSaldoInicial: Date
+    /// Ocultar conserva el historial y el efecto contable de sus movimientos.
+    var archivada: Bool = false
 
     var banco: Banco?
 

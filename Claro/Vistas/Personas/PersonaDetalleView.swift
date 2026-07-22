@@ -179,7 +179,7 @@ struct PersonaDetalleView: View {
                     Button(role: .destructive) {
                         confirmandoEliminacion = true
                     } label: {
-                        Label("Eliminar persona", systemImage: "trash")
+                        Label("Archivar persona", systemImage: "archivebox")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -196,24 +196,19 @@ struct PersonaDetalleView: View {
         .sheet(isPresented: $mostrandoEdicion) {
             EditarPersonaView(persona: persona)
         }
-        .confirmationDialog("¿Eliminar a \(persona.nombre)?",
+        .confirmationDialog("¿Archivar a \(persona.nombre)?",
                             isPresented: $confirmandoEliminacion,
                             titleVisibility: .visible) {
-            Button("Sí, eliminar persona", role: .destructive) { eliminarPersona() }
+            Button("Archivar y conservar el historial") { archivarPersona() }
             Button("No", role: .cancel) { }
         } message: {
-            Text("Se eliminarán también sus partes en compras compartidas y los cobros que te haya hecho. Las compras originales NO se tocan. Esta acción no se puede deshacer.")
+            Text("Dejará de aparecer para compras y cobros nuevos. Sus participaciones, pagos y excedentes históricos se conservarán.")
         }
     }
 
-    private func eliminarPersona() {
-        for parte in persona.participaciones {
-            contexto.delete(parte)
-        }
-        for movimiento in persona.movimientos {
-            contexto.delete(movimiento)
-        }
-        contexto.delete(persona)
+    private func archivarPersona() {
+        persona.archivada = true
+        try? contexto.save()
         cerrar()
     }
 

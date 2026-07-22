@@ -4,7 +4,7 @@ import SwiftUI
 struct IngresosRecurrentesView: View {
     @Environment(\.modelContext) private var contexto
     @Query(sort: \IngresoRecurrente.nombre) private var ingresos: [IngresoRecurrente]
-    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
     @State private var mostrandoNuevo = false
 
     var body: some View {
@@ -105,7 +105,7 @@ private struct EditarIngresoRecurrenteView: View {
     var ingreso: IngresoRecurrente? = nil
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
-    @Query(sort: \CuentaBancaria.nombre) private var cuentasDisponibles: [CuentaBancaria]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentasDisponibles: [CuentaBancaria]
     @State private var nombre = ""
     @State private var monto: Double?
     @State private var diaInicial = 1

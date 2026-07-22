@@ -14,6 +14,7 @@ struct ConfiguracionView: View {
 
     @AppStorage("bloqueoActivado") private var bloqueoActivado = false
     @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
+    @AppStorage("mostrarMontosEnNotificaciones") private var mostrarMontosEnNotificaciones = false
     @AppStorage("importarConIA") private var importarConIA = true
     @AppStorage("apariencia") private var apariencia = Apariencia.oscuro.rawValue
     @AppStorage("modoHistoricoActivo") private var modoHistoricoActivo = false
@@ -21,8 +22,8 @@ struct ConfiguracionView: View {
 
     @State private var confirmandoBorrado = false
 
-    @Query private var tarjetas: [TarjetaCredito]
-    @Query private var personas: [Persona]
+    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }) private var tarjetas: [TarjetaCredito]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }) private var personas: [Persona]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
 
@@ -47,17 +48,25 @@ struct ConfiguracionView: View {
                     Toggle("Recordatorios de pagos", isOn: $notificacionesActivadas)
                         .onChange(of: notificacionesActivadas) { _, activadas in
                             if activadas {
-                                ProgramadorDeNotificaciones.pedirPermiso()
-                                ProgramadorDeNotificaciones.reprogramar(tarjetas: tarjetas,
-                                                                        personas: personas)
+                                ProgramadorDeNotificaciones.pedirPermiso { autorizado in
+                                    if autorizado {
+                                        ProgramadorDeNotificaciones.reprogramar(
+                                            tarjetas: tarjetas, personas: personas)
+                                    } else {
+                                        notificacionesActivadas = false
+                                    }
+                                }
                             } else {
                                 ProgramadorDeNotificaciones.cancelarTodas()
                             }
                         }
+                    Toggle("Mostrar cantidades en la pantalla bloqueada",
+                           isOn: $mostrarMontosEnNotificaciones)
+                        .disabled(!notificacionesActivadas)
                 } header: {
                     Text("Notificaciones")
                 } footer: {
-                    Text("Aviso del día de corte con tu parte y la de tu familia; después, cuenta regresiva a 10, 5 y 3 días y aviso urgente el día límite. Se actualizan al importar, pagar y abrir la app. Son notificaciones privadas del iPhone: automáticas, gratuitas y sin entregar tus datos financieros a terceros.")
+                    Text("Aviso al importar el corte, cuenta regresiva a 10, 5 y 3 días y aviso urgente el día límite. Por privacidad, las cantidades permanecen ocultas en la pantalla bloqueada salvo que tú decidas mostrarlas.")
                 }
 
                 Section {
@@ -97,6 +106,11 @@ struct ConfiguracionView: View {
                 } header: { Text("Planeación") }
 
                 Section {
+                    NavigationLink {
+                        ElementosArchivadosView()
+                    } label: {
+                        Label("Elementos archivados", systemImage: "archivebox.fill")
+                    }
                     NavigationLink {
                         RespaldoView()
                     } label: {
@@ -167,5 +181,71 @@ struct ConfiguracionView: View {
                 .foregroundStyle(Tema.textoPrincipal)
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct ElementosArchivadosView: View {
+    @Environment(\.modelContext) private var contexto
+
+    @Query(filter: #Predicate<CuentaBancaria> { $0.archivada },
+           sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<TarjetaCredito> { $0.archivada },
+           sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
+    @Query(filter: #Predicate<Persona> { $0.archivada },
+           sort: \Persona.nombre) private var personas: [Persona]
+    @Query(filter: #Predicate<Deuda> { $0.archivada },
+           sort: \Deuda.acreedor) private var deudas: [Deuda]
+
+    private var estaVacio: Bool {
+        cuentas.isEmpty && tarjetas.isEmpty && personas.isEmpty && deudas.isEmpty
+    }
+
+    var body: some View {
+        List {
+            if estaVacio {
+                ContentUnavailableView("No hay elementos archivados",
+                                       systemImage: "archivebox")
+            }
+            seccion("Cuentas", elementos: cuentas, nombre: \.nombre) {
+                $0.archivada = false
+            }
+            seccion("Tarjetas", elementos: tarjetas, nombre: \.nombre) {
+                $0.archivada = false
+            }
+            seccion("Personas", elementos: personas, nombre: \.nombre) {
+                $0.archivada = false
+            }
+            seccion("Deudas", elementos: deudas, nombre: \.acreedor) {
+                $0.archivada = false
+            }
+        }
+        .navigationTitle("Archivados")
+        .navigationBarTitleDisplayMode(.inline)
+        .scrollContentBackground(.hidden)
+        .background(Tema.fondo.ignoresSafeArea())
+    }
+
+    @ViewBuilder
+    private func seccion<T: PersistentModel>(
+        _ titulo: String,
+        elementos: [T],
+        nombre: KeyPath<T, String>,
+        restaurar: @escaping (T) -> Void
+    ) -> some View {
+        if !elementos.isEmpty {
+            Section(titulo) {
+                ForEach(elementos) { elemento in
+                    HStack {
+                        Text(elemento[keyPath: nombre])
+                        Spacer()
+                        Button("Restaurar") {
+                            restaurar(elemento)
+                            try? contexto.save()
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
     }
 }

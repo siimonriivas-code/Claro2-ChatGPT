@@ -50,19 +50,42 @@ nonisolated enum ConciliadorEstadoCuenta {
 
 extension TarjetaCredito {
 
-    /// Deuda TOTAL actual de la tarjeta, calculada desde los movimientos.
-    /// Deuda = saldo inicial + compras − pagos − bonificaciones ± ajustes
-    var deudaCalculada: Double {
-        var deuda = saldoInicial
-        for m in movimientos where m.cuentaParaCalculos {
+    private func finDelDia(_ fecha: Date) -> Date {
+        let calendario = Calendar.current
+        let inicio = calendario.startOfDay(for: fecha)
+        let siguienteDia = calendario.date(byAdding: .day, value: 1, to: inicio)
+        return siguienteDia?.addingTimeInterval(-0.001) ?? fecha
+    }
+
+    /// Deuda registrada hasta una fecha. Compras y pagos futuros quedan
+    /// pendientes y no modifican el panorama actual.
+    func deudaCalculada(hasta fecha: Date) -> Double {
+        let limite = finDelDia(fecha)
+        guard limite >= fechaSaldoInicial || saldoInicial == 0 else { return 0 }
+
+        var deuda = limite >= fechaSaldoInicial ? saldoInicial : 0
+        for m in movimientos where m.cuentaParaCalculos && m.fecha <= limite {
             switch m.tipo {
-            case .compraCredito:            deuda += m.monto
+            case .compraCredito:              deuda += m.monto
             case .pagoTarjeta, .bonificacion: deuda -= m.monto
-            case .ajuste:                   deuda += m.monto
+            case .ajuste:                     deuda += m.monto
             default: break
             }
         }
-        return deuda
+        return max(0, deuda).redondeadoAMoneda
+    }
+
+    /// Deuda TOTAL actual de la tarjeta, calculada desde los movimientos.
+    /// Deuda = saldo inicial + compras − pagos − bonificaciones ± ajustes
+    var deudaCalculada: Double {
+        deudaCalculada(hasta: FechaAnalisisClaro.actual)
+    }
+
+    var movimientosProgramados: [Movimiento] {
+        let limite = finDelDia(FechaAnalisisClaro.actual)
+        return movimientos
+            .filter { $0.cuentaParaCalculos && $0.fecha > limite }
+            .sorted { $0.fecha < $1.fecha }
     }
 
     /// Crédito que te queda disponible en la tarjeta.

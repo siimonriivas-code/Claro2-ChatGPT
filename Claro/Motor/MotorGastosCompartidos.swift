@@ -36,6 +36,19 @@ enum MotorGastosCompartidos {
             }
         }
 
+        for pago in grupo.liquidaciones {
+            let clavePagador = clave(esUsuario: pago.pagadorEsUsuario,
+                                     persona: pago.pagador,
+                                     nombreGuardado: pago.pagadorNombreGuardado)
+            let claveReceptor = clave(esUsuario: pago.receptorEsUsuario,
+                                      persona: pago.receptor,
+                                      nombreGuardado: pago.receptorNombreGuardado)
+            nombres[clavePagador] = pago.nombrePagador
+            nombres[claveReceptor] = pago.nombreReceptor
+            montos[clavePagador, default: 0] += pago.monto
+            montos[claveReceptor, default: 0] -= pago.monto
+        }
+
         return montos.map { clave, monto in
             SaldoGastoCompartido(id: clave,
                                  nombre: nombres[clave] ?? "Participante",

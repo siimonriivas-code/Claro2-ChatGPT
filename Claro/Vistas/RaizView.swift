@@ -17,10 +17,10 @@ struct RaizView: View {
     @AppStorage("bloqueoActivado") private var bloqueoActivado = false
     @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
 
-    @Query private var tarjetas: [TarjetaCredito]
-    @Query private var personas: [Persona]
+    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }) private var tarjetas: [TarjetaCredito]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }) private var personas: [Persona]
     @Query private var bancos: [Banco]
-    @Query private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }) private var cuentas: [CuentaBancaria]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
 
@@ -56,6 +56,12 @@ struct RaizView: View {
                 BloqueoView { desbloqueada = true }
                     .transition(.opacity)
             }
+
+            // Evita que el selector de apps o una captura de transición
+            // expongan saldos mientras Claro no está activo.
+            if fase != .active {
+                Tema.fondo.ignoresSafeArea()
+            }
         }
         .aparienciaDeLaApp()
         .task {
@@ -71,7 +77,7 @@ struct RaizView: View {
             }
         }
         .onChange(of: fase) { _, nuevaFase in
-            if nuevaFase == .background {
+            if nuevaFase != .active {
                 // Al irse al fondo, la app vuelve a quedar bloqueada
                 desbloqueada = false
             }

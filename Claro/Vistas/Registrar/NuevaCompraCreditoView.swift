@@ -14,9 +14,9 @@ struct NuevaCompraCreditoView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
 
-    @Query(sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
+    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }, sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
     @Query(sort: \Categoria.nombre) private var categorias: [Categoria]
-    @Query(sort: \Persona.nombre) private var personas: [Persona]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
 
     @State private var monto: Double?
     @State private var tarjetaSeleccionada: TarjetaCredito?

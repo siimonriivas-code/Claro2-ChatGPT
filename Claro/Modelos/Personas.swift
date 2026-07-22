@@ -14,6 +14,7 @@ import SwiftData
 final class Persona {
     var nombre: String
     var colorHex: String
+    var archivada: Bool = false
 
     // Sus partes en compras compartidas
     @Relationship(deleteRule: .cascade, inverse: \Participacion.persona)

@@ -17,7 +17,7 @@ struct PlanMSIDetalleView: View {
 
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
-    @Query(sort: \Persona.nombre) private var personas: [Persona]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
 
     @State private var mostrandoDivision = false
     @State private var partesEdicion: [PersistentIdentifier: Double] = [:]

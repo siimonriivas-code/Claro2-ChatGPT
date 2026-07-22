@@ -2,6 +2,93 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct ComprobarSaldoCuentaView: View {
+    let cuenta: CuentaBancaria
+    @Environment(\.modelContext) private var contexto
+    @Environment(\.dismiss) private var cerrar
+    @State private var fecha = FechaAnalisisClaro.actual
+    @State private var saldoBanco = ""
+    @State private var crearAjuste = false
+    @State private var error: String?
+
+    private var saldoNumerico: Double? {
+        Double(saldoBanco.replacingOccurrences(of: ",", with: ""))
+    }
+
+    private var saldoClaro: Double { cuenta.saldoCalculado(hasta: fecha) }
+    private var diferencia: Double {
+        ((saldoNumerico ?? saldoClaro) - saldoClaro).redondeadoAMoneda
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Saldo de tu banco") {
+                    DatePicker("Fecha de comprobación", selection: $fecha,
+                               in: ...Date.now, displayedComponents: .date)
+                    TextField("Saldo que muestra BBVA", text: $saldoBanco)
+                        .keyboardType(.decimalPad)
+                }
+
+                Section("Comparación") {
+                    LabeledContent("Claro calcula", value: saldoClaro.comoDinero)
+                    if saldoNumerico != nil {
+                        LabeledContent("Diferencia", value: diferencia.comoDinero)
+                            .foregroundStyle(abs(diferencia) < 0.01
+                                             ? Tema.positivo : Tema.advertencia)
+                    }
+                }
+
+                if saldoNumerico != nil && abs(diferencia) >= 0.01 {
+                    Section {
+                        Toggle("Crear ajuste explícito por la diferencia",
+                               isOn: $crearAjuste)
+                    } footer: {
+                        Text("Úsalo solo después de revisar que no falte registrar un ingreso, pago o gasto. El ajuste quedará visible en Movimientos; nunca se modificará el saldo a escondidas.")
+                    }
+                }
+            }
+            .navigationTitle("Comprobar saldo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { cerrar() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") { guardar() }.disabled(saldoNumerico == nil)
+                }
+            }
+            .alert("No se pudo guardar", isPresented: Binding(
+                get: { error != nil }, set: { if !$0 { error = nil } })) {
+                    Button("Entendido", role: .cancel) { }
+                } message: { Text(error ?? "") }
+        }
+        .aparienciaDeLaApp()
+    }
+
+    private func guardar() {
+        guard let saldoBanco = saldoNumerico else { return }
+        let id = UUID()
+        if crearAjuste && abs(diferencia) >= 0.01 {
+            let ajuste = Movimiento(tipo: .ajuste, monto: diferencia, fecha: fecha,
+                                    detalle: "Ajuste por comprobación de saldo",
+                                    cuenta: cuenta)
+            ajuste.importacionID = id
+            contexto.insert(ajuste)
+        }
+        contexto.insert(ConciliacionCuentaBancaria(
+            bancoDetectado: cuenta.banco?.nombre ?? "Comprobación manual",
+            archivoOrigen: "Comprobación manual", cuenta: cuenta,
+            fechaInicial: fecha, fechaFinal: fecha,
+            saldoFinalReportado: saldoBanco,
+            saldoCalculadoAlImportar: crearAjuste ? saldoBanco : saldoClaro,
+            movimientosImportados: crearAjuste && abs(diferencia) >= 0.01 ? 1 : 0,
+            importacionID: id))
+        do { try contexto.save(); cerrar() }
+        catch { self.error = "Claro no pudo conservar la comprobación: \(error.localizedDescription)" }
+    }
+}
+
 struct ImportarEstadoDebitoView: View {
     let cuenta: CuentaBancaria
     @Environment(\.modelContext) private var contexto

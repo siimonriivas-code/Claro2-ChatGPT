@@ -14,7 +14,7 @@ struct FusionarCuentaView: View {
 
     @Environment(\.dismiss) private var cerrar
     @Environment(\.modelContext) private var contexto
-    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
 
     @State private var destino: CuentaBancaria?
     @State private var confirmando = false
@@ -72,7 +72,7 @@ struct FusionarCuentaView: View {
                     } header: {
                         Text("Resultado")
                     } footer: {
-                        Text("La cuenta \(cuentaOrigen.nombre) desaparecerá después de trasladar su saldo y movimientos. No se modifica ninguna tarjeta.")
+                        Text("Claro tomará una nueva foto del saldo combinado para no sumar dos saldos iniciales de fechas distintas. La cuenta duplicada quedará archivada y no se modifica ninguna tarjeta.")
                     }
                 }
             }

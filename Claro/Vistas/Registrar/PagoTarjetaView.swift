@@ -16,16 +16,18 @@ struct PagoTarjetaView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
 
-    @Query(sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
-    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
-    @Query(sort: \Persona.nombre) private var personas: [Persona]
+    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }, sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
     @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
 
     @State private var monto: Double?
     @State private var tarjetaSeleccionada: TarjetaCredito?
     @State private var cuentaOrigen: CuentaBancaria?
+    @State private var estadoObjetivo: EstadoDeCuenta?
     @State private var fecha: Date = .now
     @State private var detalle = ""
+    @State private var errorGuardado: String?
 
     init(tarjetaInicial: TarjetaCredito? = nil) {
         self.tarjetaInicial = tarjetaInicial
@@ -44,6 +46,12 @@ struct PagoTarjetaView: View {
         && tarjetaSeleccionada != nil
         && cuentaOrigen != nil          // el pago DEBE salir de una cuenta
         && !fondosInsuficientes
+    }
+
+    private var cortesPendientes: [EstadoDeCuenta] {
+        (tarjetaSeleccionada?.estadosDeCuenta ?? [])
+            .filter { $0.faltaPorCubrir > 0 }
+            .sorted { $0.fechaCorte > $1.fechaCorte }
     }
 
     var body: some View {
@@ -112,6 +120,15 @@ struct PagoTarjetaView: View {
                         }
                     }
 
+                    if cortesPendientes.count > 1 {
+                        Picker("Corte al que se aplica", selection: $estadoObjetivo) {
+                            ForEach(cortesPendientes) { corte in
+                                Text("Corte \(corte.fechaCorte.formatted(date: .abbreviated, time: .omitted)) · faltan \(corte.faltaPorCubrir.comoDinero)")
+                                    .tag(corte as EstadoDeCuenta?)
+                            }
+                        }
+                    }
+
                     DatePicker("Fecha del pago", selection: $fecha,
                                displayedComponents: .date)
 
@@ -149,15 +166,21 @@ struct PagoTarjetaView: View {
                             detalle: detalle.trimmingCharacters(in: .whitespaces),
                             cuenta: cuentaOrigen,
                             tarjeta: tarjetaSeleccionada)
-                        movimiento.fechaCorteObjetivoPago =
-                            tarjetaSeleccionada?.estadoDeCuentaVigente?.fechaCorte
+                        movimiento.fechaCorteObjetivoPago = (estadoObjetivo
+                            ?? cortesPendientes.first
+                            ?? tarjetaSeleccionada?.estadoDeCuentaVigente)?.fechaCorte
                         contexto.insert(movimiento)
-                        try? contexto.save()
-                        if notificacionesActivadas {
-                            ProgramadorDeNotificaciones.reprogramar(
-                                tarjetas: tarjetas, personas: personas)
+                        do {
+                            try contexto.save()
+                            if notificacionesActivadas {
+                                ProgramadorDeNotificaciones.reprogramar(
+                                    tarjetas: tarjetas, personas: personas)
+                            }
+                            cerrar()
+                        } catch {
+                            contexto.delete(movimiento)
+                            errorGuardado = "El pago no se guardó: \(error.localizedDescription)"
                         }
-                        cerrar()
                     }
                     .disabled(!puedeGuardar)
                 }
@@ -166,6 +189,14 @@ struct PagoTarjetaView: View {
         .aparienciaDeLaApp()
         .onAppear { seleccionarCuentaUnica() }
         .onChange(of: cuentas.count) { _, _ in seleccionarCuentaUnica() }
+        .onChange(of: tarjetaSeleccionada) { _, _ in
+            estadoObjetivo = cortesPendientes.first
+        }
+        .alert("No se pudo registrar el pago", isPresented: Binding(
+            get: { errorGuardado != nil },
+            set: { if !$0 { errorGuardado = nil } })) {
+                Button("Entendido", role: .cancel) { }
+            } message: { Text(errorGuardado ?? "") }
     }
 
     private func seleccionarCuentaUnica() {

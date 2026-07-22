@@ -140,6 +140,7 @@ private struct GrupoGastosDetalleView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
     @State private var mostrandoGasto = false
+    @State private var mostrandoLiquidacion = false
     @State private var confirmandoEliminar = false
 
     private var deudas: [DeudaGastoSimplificada] {
@@ -194,6 +195,18 @@ private struct GrupoGastosDetalleView: View {
                 }
                 .buttonStyle(Presionable())
 
+                Button {
+                    mostrandoLiquidacion = true
+                } label: {
+                    Label("Registrar pago entre participantes",
+                          systemImage: "arrow.left.arrow.right.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                }
+                .buttonStyle(.bordered)
+                .tint(Tema.positivo)
+
                 TituloSeccion(texto: "Gastos")
                 if gastosOrdenados.isEmpty {
                     Panel {
@@ -231,6 +244,24 @@ private struct GrupoGastosDetalleView: View {
                         }
                     }
                 }
+
+                if !grupo.liquidaciones.isEmpty {
+                    TituloSeccion(texto: "Pagos entre participantes")
+                    ForEach(grupo.liquidaciones.sorted { $0.fecha > $1.fecha }) { pago in
+                        Panel {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("\(pago.nombrePagador) pagó a \(pago.nombreReceptor)")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(pago.fecha.formatted(date: .abbreviated, time: .omitted))
+                                        .font(.caption).foregroundStyle(Tema.textoSecundario)
+                                }
+                                Spacer()
+                                Text(pago.monto.comoDinero).fontWeight(.bold)
+                            }
+                        }
+                    }
+                }
             }
             .padding(16)
         }
@@ -249,6 +280,9 @@ private struct GrupoGastosDetalleView: View {
         .sheet(isPresented: $mostrandoGasto) {
             NuevoGastoCompartidoView(grupo: grupo)
         }
+        .sheet(isPresented: $mostrandoLiquidacion) {
+            NuevaLiquidacionGastoView(grupo: grupo)
+        }
         .confirmationDialog("¿Eliminar \(grupo.nombre)?",
                             isPresented: $confirmandoEliminar) {
             Button("Eliminar grupo y sus gastos", role: .destructive) {
@@ -261,11 +295,84 @@ private struct GrupoGastosDetalleView: View {
     }
 }
 
+private struct NuevaLiquidacionGastoView: View {
+    let grupo: GrupoGastosCompartidos
+    @Environment(\.modelContext) private var contexto
+    @Environment(\.dismiss) private var cerrar
+    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre)
+    private var personas: [Persona]
+    @State private var monto: Double?
+    @State private var fecha = Date.now
+    @State private var pagadorEsUsuario = true
+    @State private var receptorEsUsuario = false
+    @State private var pagador: Persona?
+    @State private var receptor: Persona?
+
+    private var valido: Bool {
+        guard (monto ?? 0) > 0 else { return false }
+        if !pagadorEsUsuario && pagador == nil { return false }
+        if !receptorEsUsuario && receptor == nil { return false }
+        if pagadorEsUsuario && receptorEsUsuario { return false }
+        if !pagadorEsUsuario && !receptorEsUsuario && pagador === receptor { return false }
+        return true
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Pago realizado") {
+                    TextField("Monto", value: $monto, format: .number)
+                        .keyboardType(.decimalPad)
+                    DatePicker("Fecha", selection: $fecha, displayedComponents: .date)
+                }
+                Section("Quién pagó") {
+                    Toggle("Fui yo", isOn: $pagadorEsUsuario)
+                    if !pagadorEsUsuario {
+                        Picker("Persona", selection: $pagador) {
+                            Text("Selecciona…").tag(nil as Persona?)
+                            ForEach(personas) { Text($0.nombre).tag($0 as Persona?) }
+                        }
+                    }
+                }
+                Section("Quién recibió") {
+                    Toggle("Fui yo", isOn: $receptorEsUsuario)
+                    if !receptorEsUsuario {
+                        Picker("Persona", selection: $receptor) {
+                            Text("Selecciona…").tag(nil as Persona?)
+                            ForEach(personas) { Text($0.nombre).tag($0 as Persona?) }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Registrar pago")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { cerrar() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Guardar") { guardar() }.disabled(!valido)
+                }
+            }
+        }.aparienciaDeLaApp()
+    }
+
+    private func guardar() {
+        contexto.insert(LiquidacionGastoIndependiente(
+            monto: monto ?? 0, fecha: fecha,
+            pagadorEsUsuario: pagadorEsUsuario,
+            pagador: pagadorEsUsuario ? nil : pagador,
+            pagadorNombreGuardado: pagadorEsUsuario ? "Tú" : (pagador?.nombre ?? "Persona"),
+            receptorEsUsuario: receptorEsUsuario,
+            receptor: receptorEsUsuario ? nil : receptor,
+            receptorNombreGuardado: receptorEsUsuario ? "Tú" : (receptor?.nombre ?? "Persona"),
+            grupo: grupo))
+        try? contexto.save(); cerrar()
+    }
+}
+
 private struct NuevoGastoCompartidoView: View {
     let grupo: GrupoGastosCompartidos
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
-    @Query(sort: \Persona.nombre) private var personas: [Persona]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
 
     @State private var concepto = ""
     @State private var monto: Double?
@@ -274,6 +381,9 @@ private struct NuevoGastoCompartidoView: View {
     @State private var pagueYo = true
     @State private var participaUsuario = true
     @State private var participantes: Set<PersistentIdentifier> = []
+    @State private var modoDivision: ModoDivisionGasto = .iguales
+    @State private var parteUsuario: Double?
+    @State private var partesPersonalizadas: [PersistentIdentifier: Double] = [:]
 
     private var cantidadParticipantes: Int {
         (participaUsuario ? 1 : 0) + participantes.count
@@ -284,6 +394,23 @@ private struct NuevoGastoCompartidoView: View {
             && (monto ?? 0) > 0
             && cantidadParticipantes > 0
             && (pagueYo || pagador != nil)
+            && divisionValida
+    }
+
+    private var totalCapturado: Double {
+        let usuario = participaUsuario ? (parteUsuario ?? 0) : 0
+        return participantes.reduce(usuario) {
+            $0 + (partesPersonalizadas[$1] ?? 0)
+        }
+    }
+
+    private var divisionValida: Bool {
+        guard let monto, cantidadParticipantes > 0 else { return false }
+        switch modoDivision {
+        case .iguales: return true
+        case .montos: return abs(totalCapturado - monto) < 0.01
+        case .porcentajes: return abs(totalCapturado - 100) < 0.01
+        }
     }
 
     var body: some View {
@@ -310,6 +437,11 @@ private struct NuevoGastoCompartidoView: View {
                 }
 
                 Section("Entre quiénes se divide") {
+                    Picker("Forma", selection: $modoDivision) {
+                        ForEach(ModoDivisionGasto.allCases) { modo in
+                            Text(modo.rawValue).tag(modo)
+                        }
+                    }
                     Toggle("Yo", isOn: $participaUsuario)
                     ForEach(personas) { persona in
                         Toggle(persona.nombre, isOn: Binding(
@@ -321,7 +453,35 @@ private struct NuevoGastoCompartidoView: View {
                     }
                 }
 
-                if let monto, cantidadParticipantes > 0 {
+
+                if modoDivision != .iguales && cantidadParticipantes > 0 {
+                    Section(modoDivision == .montos
+                            ? "Monto de cada persona" : "Porcentaje de cada persona") {
+                        if participaUsuario {
+                            TextField(modoDivision == .montos ? "Mi monto" : "Mi porcentaje",
+                                      value: $parteUsuario, format: .number)
+                                .keyboardType(.decimalPad)
+                        }
+                        ForEach(personas.filter { participantes.contains($0.id) }) { persona in
+                            TextField(modoDivision == .montos
+                                      ? "Monto de \(persona.nombre)"
+                                      : "Porcentaje de \(persona.nombre)",
+                                      value: Binding(
+                                        get: { partesPersonalizadas[persona.id] },
+                                        set: { partesPersonalizadas[persona.id] = $0 }),
+                                      format: .number)
+                                .keyboardType(.decimalPad)
+                        }
+                        LabeledContent(modoDivision == .montos ? "Asignado" : "Asignado") {
+                            Text(modoDivision == .montos
+                                 ? totalCapturado.comoDinero
+                                 : "\(totalCapturado.formatted(.number.precision(.fractionLength(0...2))))%")
+                                .foregroundStyle(divisionValida ? Tema.positivo : Tema.advertencia)
+                        }
+                    }
+                }
+
+                if let monto, cantidadParticipantes > 0, modoDivision == .iguales {
                     Section("Vista previa") {
                         LabeledContent("Por persona") {
                             Text((monto / Double(cantidadParticipantes)).redondeadoAMoneda.comoDinero)
@@ -368,8 +528,23 @@ private struct NuevoGastoCompartidoView: View {
         let base = (total / Double(destinos.count)).redondeadoAMoneda
         var asignado = 0.0
         for (indice, destino) in destinos.enumerated() {
+            let capturado: Double
+            if destino.esUsuario {
+                capturado = parteUsuario ?? 0
+            } else if let persona = destino.persona {
+                capturado = partesPersonalizadas[persona.id] ?? 0
+            } else {
+                capturado = 0
+            }
+            let calculado: Double
+            switch modoDivision {
+            case .iguales: calculado = base
+            case .montos: calculado = capturado
+            case .porcentajes: calculado = total * capturado / 100
+            }
             let parteMonto = indice == destinos.count - 1
-                ? (total - asignado).redondeadoAMoneda : base
+                ? (total - asignado).redondeadoAMoneda
+                : calculado.redondeadoAMoneda
             asignado += parteMonto
             contexto.insert(ParteGastoIndependiente(
                 monto: parteMonto,
@@ -381,4 +556,11 @@ private struct NuevoGastoCompartidoView: View {
         try? contexto.save()
         cerrar()
     }
+}
+
+private enum ModoDivisionGasto: String, CaseIterable, Identifiable {
+    case iguales = "Partes iguales"
+    case montos = "Montos exactos"
+    case porcentajes = "Porcentajes"
+    var id: String { rawValue }
 }

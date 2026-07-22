@@ -21,6 +21,12 @@ final class TarjetaCredito {
     var colorHex: String
     var tasaAnual: Double? = nil
     var cat: Double? = nil
+    /// Una tarjeta archivada deja de ofrecerse para operaciones nuevas, pero
+    /// conserva pagos, cortes y compras históricas.
+    var archivada: Bool = false
+    /// Clave local estable para cancelar y renovar solo los avisos de esta
+    /// tarjeta, incluso si dos tarjetas tienen el mismo nombre.
+    var identificadorNotificaciones: String = UUID().uuidString
 
     var banco: Banco?
 

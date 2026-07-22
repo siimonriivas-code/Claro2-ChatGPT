@@ -275,7 +275,7 @@ struct TarjetaDetalleView: View {
                     Button(role: .destructive) {
                         confirmandoEliminacion = true
                     } label: {
-                        Label("Eliminar tarjeta", systemImage: "trash")
+                        Label("Archivar tarjeta", systemImage: "archivebox")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -286,14 +286,13 @@ struct TarjetaDetalleView: View {
         .sheet(isPresented: $mostrandoEdicion) {
             EditarTarjetaView(tarjeta: tarjeta)
         }
-        .confirmationDialog("¿Eliminar esta tarjeta?",
+        .confirmationDialog("¿Archivar esta tarjeta?",
                             isPresented: $confirmandoEliminacion,
                             titleVisibility: .visible) {
-            Button("Sí, eliminar tarjeta con todo su historial",
-                   role: .destructive) { eliminarTarjeta() }
+            Button("Archivar y conservar el historial") { archivarTarjeta() }
             Button("No", role: .cancel) { }
         } message: {
-            Text("Se eliminarán la tarjeta, sus \(tarjeta.movimientos.count) movimientos, sus estados de cuenta y sus planes a meses. Esta acción no se puede deshacer.")
+            Text("Dejará de aparecer y no aceptará compras nuevas. Sus pagos, cortes, MSI y movimientos seguirán intactos.")
         }
         .sheet(isPresented: $mostrandoPago) {
             PagoTarjetaView(tarjetaInicial: tarjeta)
@@ -305,17 +304,9 @@ struct TarjetaDetalleView: View {
 
     // MARK: - Eliminar tarjeta
 
-    private func eliminarTarjeta() {
-        for movimiento in tarjeta.movimientos {
-            if let compartida = movimiento.compraCompartida {
-                for parte in compartida.participaciones { contexto.delete(parte) }
-                movimiento.compraCompartida = nil
-                contexto.delete(compartida)
-            }
-            contexto.delete(movimiento)
-        }
-        // Estados de cuenta y planes (con sus mensualidades) se van en cascada
-        contexto.delete(tarjeta)
+    private func archivarTarjeta() {
+        tarjeta.archivada = true
+        try? contexto.save()
         cerrar()
     }
 

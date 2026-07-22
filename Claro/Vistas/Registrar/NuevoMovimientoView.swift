@@ -17,9 +17,9 @@ struct NuevoMovimientoView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
 
-    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
     @Query(sort: \Categoria.nombre) private var categorias: [Categoria]
-    @Query(sort: \Persona.nombre) private var personas: [Persona]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
 
     @State private var monto: Double?
     @State private var cuentaSeleccionada: CuentaBancaria?

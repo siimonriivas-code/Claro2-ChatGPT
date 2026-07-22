@@ -15,9 +15,9 @@ struct CuentasView: View {
     @Environment(\.modelContext) private var contexto
 
     @Query(sort: \Banco.nombre) private var bancos: [Banco]
-    @Query private var cuentas: [CuentaBancaria]
-    @Query(sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
-    @Query(sort: \Deuda.acreedor) private var deudas: [Deuda]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }, sort: \TarjetaCredito.nombre) private var tarjetas: [TarjetaCredito]
+    @Query(filter: #Predicate<Deuda> { !$0.archivada }, sort: \Deuda.acreedor) private var deudas: [Deuda]
 
     @State private var mostrandoNuevoBanco = false
     @State private var mostrandoNuevaCuenta = false

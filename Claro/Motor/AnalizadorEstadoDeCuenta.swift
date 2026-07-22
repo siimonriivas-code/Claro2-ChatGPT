@@ -1081,11 +1081,13 @@ enum AnalizadorEstadoDeCuenta {
     }
 
     private static func detectarUltimosDigitos(en texto: String) -> String? {
-        let patrones = [
-            #"(?:TERMINACION|TERMINACIÓN|ULTIMOS 4|ÚLTIMOS 4|TARJETA|CUENTA)[^\n]{0,45}?(\d{4})(?!\d)"#,
-            #"(?:\*|X|•){2,}\s*(\d{4})(?!\d)"#
+        // 1. La fuente más fuerte es una terminación explícita o un PAN
+        // enmascarado. En estos formatos el grupo ya representa los últimos 4.
+        let patronesTerminacion = [
+            #"(?:TERMINACION|TERMINACIÓN|ULTIMOS 4|ÚLTIMOS 4)[^\n]{0,30}?(\d{4})(?!\d)"#,
+            #"(?:\*|X|•){2,}(?:\s+(?:\*|X|•){2,}){0,4}\s*(\d{4})(?!\d)"#
         ]
-        for patron in patrones {
+        for patron in patronesTerminacion {
             guard let regex = try? NSRegularExpression(
                 pattern: patron, options: [.caseInsensitive]) else { continue }
             let rango = NSRange(texto.startIndex..., in: texto)
@@ -1094,6 +1096,31 @@ enum AnalizadorEstadoDeCuenta {
                 let valor = String(texto[r])
                 // Evita tomar años impresos cerca de textos genéricos.
                 if !(2000...2100).contains(Int(valor) ?? 0) { return valor }
+            }
+        }
+
+        // 2. Hey Banco y Banamex imprimen el número completo, a veces junto y
+        // a veces en bloques: "Número de tarjeta 5499 4905 6134 4490". La
+        // regla anterior capturaba 5499 porque era el primer bloque. Ahora se
+        // captura el PAN completo y únicamente después se toma su terminación.
+        // Nunca usamos "CUENTA": Rappi, por ejemplo, también imprime un número
+        // de cuenta de 20 dígitos que no identifica la tarjeta.
+        let patronesPAN = [
+            #"(?:NUMERO|NÚMERO)\s+DE\s+(?:LA\s+)?TARJETA\s*[:#]?\s*((?:\d[\s-]*){12,19})"#,
+            #"TARJETA\s+(?:TITULAR|DIGITAL|VIRTUAL)\s*[:#]?\s*((?:\d[\s-]*){12,19})"#,
+            #"(?:TITULAR|VIRTUAL)\s*#\s*((?:\d[\s-]*){12,19})"#
+        ]
+        for patron in patronesPAN {
+            guard let regex = try? NSRegularExpression(
+                pattern: patron, options: [.caseInsensitive]) else { continue }
+            let rango = NSRange(texto.startIndex..., in: texto)
+            for coincidencia in regex.matches(in: texto, range: rango) {
+                guard let r = Range(coincidencia.range(at: 1), in: texto) else {
+                    continue
+                }
+                let digitos = texto[r].filter(\.isNumber)
+                guard (12...19).contains(digitos.count) else { continue }
+                return String(digitos.suffix(4))
             }
         }
         return nil

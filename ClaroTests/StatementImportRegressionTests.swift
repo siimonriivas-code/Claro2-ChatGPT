@@ -5,6 +5,7 @@ final class StatementImportRegressionTests: XCTestCase {
     func testBanamexExtraeCadenaContableDelPeriodo() async {
         let texto = """
         BANAMEX
+        Número de tarjeta 5499 4905 6134 4490
         Fecha de corte: 17-jul-2026
         Fecha límite de pago: lunes, 10-ago-2026
         Pago para no generar intereses: $6,295.08
@@ -24,6 +25,7 @@ final class StatementImportRegressionTests: XCTestCase {
             paginas: [texto])
         XCTAssertEqual(resultado.adeudoPeriodoAnterior!,
                        11_297.44, accuracy: 0.001)
+        XCTAssertEqual(resultado.ultimosDigitosDetectados, "4490")
         XCTAssertEqual(resultado.cargosYCostosPeriodo!,
                        6_307.08, accuracy: 0.001)
         XCTAssertEqual(resultado.pagosYAbonosPeriodo!,
@@ -36,6 +38,23 @@ final class StatementImportRegressionTests: XCTestCase {
                 resultado.pagoParaNoGenerarIntereses!)
         XCTAssertTrue(comprobacion.esCoherente)
         XCTAssertEqual(comprobacion.saldoEsperado, 6_295.08, accuracy: 0.001)
+    }
+
+    func testHeyBancoTomaLaTerminacionDeUnNumeroCompleto() async {
+        let texto = """
+        HEY BANCO
+        NÚMERO DE LA TARJETA 4741751765438803
+        Periodo 14-jun-2026 al 13-jul-2026
+        Fecha límite de pago: lunes, 03-ago-2026
+        Pago para no generar intereses $5,776.46
+        Pago mínimo $625.00
+        Saldo deudor total $13,985.11
+        """
+
+        let resultado = await AnalizadorEstadoDeCuenta.analizar(paginas: [texto])
+
+        XCTAssertEqual(resultado.bancoDetectado, "Hey Banco")
+        XCTAssertEqual(resultado.ultimosDigitosDetectados, "8803")
     }
 
 

@@ -15,8 +15,8 @@ struct CobroRecibidoView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
 
-    @Query(sort: \Persona.nombre) private var personas: [Persona]
-    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<Persona> { !$0.archivada }, sort: \Persona.nombre) private var personas: [Persona]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
 
     @State private var monto: Double?
     @State private var personaSeleccionada: Persona?

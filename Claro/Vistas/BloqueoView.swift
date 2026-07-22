@@ -78,9 +78,9 @@ struct BloqueoView: View {
                 }
             }
         } else {
-            // El dispositivo no tiene Face ID ni código configurado:
-            // no dejamos al usuario fuera de su propia app.
-            DispatchQueue.main.async { alDesbloquear() }
+            DispatchQueue.main.async {
+                mensajeError = "El iPhone no tiene Face ID ni código disponible. Configúralo en Ajustes o desactiva el bloqueo de Claro desde Configuración."
+            }
         }
     }
 }

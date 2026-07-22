@@ -87,8 +87,8 @@ struct AbonoDeudaView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
 
-    @Query(sort: \Deuda.acreedor) private var deudas: [Deuda]
-    @Query(sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
+    @Query(filter: #Predicate<Deuda> { !$0.archivada }, sort: \Deuda.acreedor) private var deudas: [Deuda]
+    @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }, sort: \CuentaBancaria.nombre) private var cuentas: [CuentaBancaria]
 
     @State private var monto: Double?
     @State private var deudaSeleccionada: Deuda?
@@ -303,7 +303,7 @@ struct DeudaDetalleView: View {
                     Button(role: .destructive) {
                         confirmandoEliminacion = true
                     } label: {
-                        Label("Eliminar deuda", systemImage: "trash")
+                        Label("Archivar deuda", systemImage: "archivebox")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -317,22 +317,19 @@ struct DeudaDetalleView: View {
         .sheet(isPresented: $mostrandoEdicion) {
             EditarDeudaView(deuda: deuda)
         }
-        .confirmationDialog("¿Eliminar esta deuda?",
+        .confirmationDialog("¿Archivar esta deuda?",
                             isPresented: $confirmandoEliminacion,
                             titleVisibility: .visible) {
-            Button("Sí, eliminar deuda y sus \(deuda.abonos.count) abonos",
-                   role: .destructive) { eliminarDeuda() }
+            Button("Archivar y conservar los abonos") { archivarDeuda() }
             Button("No", role: .cancel) { }
         } message: {
-            Text("Se eliminarán también los abonos registrados (y su efecto en las cuentas de donde salieron). Esta acción no se puede deshacer.")
+            Text("Dejará de aparecer para abonos nuevos, pero conservará la deuda y el efecto de todos sus pagos.")
         }
     }
 
-    private func eliminarDeuda() {
-        for abono in deuda.abonos {
-            contexto.delete(abono)
-        }
-        contexto.delete(deuda)
+    private func archivarDeuda() {
+        deuda.archivada = true
+        try? contexto.save()
         cerrar()
     }
 }
