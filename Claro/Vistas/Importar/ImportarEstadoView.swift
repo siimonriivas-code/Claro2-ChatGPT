@@ -37,6 +37,9 @@ struct ImportarEstadoView: View {
     @State private var pagoNoIntereses: Double?
     @State private var pagoMinimo: Double?
     @State private var saldoAlCorte: Double?
+    @State private var adeudoPeriodoAnterior: Double?
+    @State private var cargosYCostosPeriodo: Double?
+    @State private var pagosYAbonosPeriodo: Double?
     @State private var usoIA = false
     @State private var bancoDetectado: String?
     @State private var ultimosDigitosDetectados: String?
@@ -234,6 +237,49 @@ struct ImportarEstadoView: View {
                 Text("⚠️ Ley 2: esto solo informa. Nada quedará pagado hasta que registres pagos reales.")
             }
 
+            Section("Verificación automática") {
+                if let verificacion = verificacionContable {
+                    Label(verificacion.esCoherente
+                          ? "El resumen bancario cuadra"
+                          : "El resumen bancario no cuadra",
+                          systemImage: verificacion.esCoherente
+                          ? "checkmark.shield.fill"
+                          : "exclamationmark.octagon.fill")
+                        .foregroundStyle(verificacion.esCoherente
+                                         ? Tema.positivo : Tema.urgente)
+                    LabeledContent("Adeudo anterior",
+                                   value: (adeudoPeriodoAnterior ?? 0).comoDinero)
+                    LabeledContent("Cargos y costos del periodo",
+                                   value: (cargosYCostosPeriodo ?? 0).comoDinero)
+                    LabeledContent("Pagos y abonos del banco",
+                                   value: (pagosYAbonosPeriodo ?? 0).comoDinero)
+                    LabeledContent("Saldo comprobado",
+                                   value: verificacion.saldoEsperado.comoDinero)
+                } else {
+                    Label("Este banco no expone toda la ecuación del periodo; se aplicarán las validaciones normales.",
+                          systemImage: "info.circle")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.textoSecundario)
+                }
+
+                if let continuidad = verificacionContinuidad {
+                    Label(continuidad <= 1
+                          ? "Coincide con el corte anterior guardado"
+                          : "No coincide con el corte anterior guardado",
+                          systemImage: continuidad <= 1
+                          ? "link.circle.fill"
+                          : "link.badge.plus")
+                        .foregroundStyle(continuidad <= 1
+                                         ? Tema.positivo : Tema.urgente)
+                }
+
+                if conciliacionCritica {
+                    Text("Claro detendrá la importación para evitar guardar un panorama incorrecto. Revisa que el PDF corresponda a esta tarjeta y que el corte anterior esté completo.")
+                        .font(.footnote)
+                        .foregroundStyle(Tema.urgente)
+                }
+            }
+
             Section {
                 if revisiones.isEmpty {
                     Text("No se detectaron movimientos. Puedes importar solo los datos del corte.")
@@ -420,6 +466,47 @@ struct ImportarEstadoView: View {
             && (!(hayDiscrepanciaBanco || hayDiscrepanciaTarjeta)
                 || confirmandoDiscrepancia)
             && (estadoPosiblementeDuplicado == nil || confirmandoDuplicado)
+            && !conciliacionCritica
+    }
+
+    private var corteAnterior: EstadoDeCuenta? {
+        tarjeta.estadosDeCuenta
+            .filter { $0.fechaCorte < fechaCorte }
+            .max { $0.fechaCorte < $1.fechaCorte }
+    }
+
+    private var esBanamexDetectado: Bool {
+        normalizarComparacion(bancoDetectado ?? "").contains("BANAMEX")
+    }
+
+    private var verificacionContable: VerificacionContableEstado? {
+        guard let anterior = adeudoPeriodoAnterior,
+              let cargos = cargosYCostosPeriodo,
+              let pagos = pagosYAbonosPeriodo,
+              let nuevo = pagoNoIntereses else { return nil }
+        return ConciliadorEstadoCuenta.verificar(
+            adeudoAnterior: anterior, cargosYCostos: cargos,
+            pagosYAbonos: pagos,
+            nuevoPagoParaNoGenerarIntereses: nuevo)
+    }
+
+    private var verificacionContinuidad: Double? {
+        guard esBanamexDetectado,
+              let reportado = adeudoPeriodoAnterior,
+              let anterior = corteAnterior else { return nil }
+        return abs(ConciliadorEstadoCuenta.diferenciaConCorteAnterior(
+            adeudoAnteriorReportado: reportado,
+            corteAnterior: anterior))
+    }
+
+    private var conciliacionCritica: Bool {
+        if let contable = verificacionContable, !contable.esCoherente {
+            return true
+        }
+        if let continuidad = verificacionContinuidad, continuidad > 1 {
+            return true
+        }
+        return false
     }
 
     private func normalizarComparacion(_ texto: String) -> String {
@@ -480,6 +567,9 @@ struct ImportarEstadoView: View {
         pagoNoIntereses = datos.pagoParaNoGenerarIntereses
         pagoMinimo = datos.pagoMinimo
         saldoAlCorte = datos.saldoAlCorte
+        adeudoPeriodoAnterior = datos.adeudoPeriodoAnterior
+        cargosYCostosPeriodo = datos.cargosYCostosPeriodo
+        pagosYAbonosPeriodo = datos.pagosYAbonosPeriodo
 
         let comprasExistentes = tarjeta.movimientos.filter {
             $0.cuentaParaCalculos && $0.tipo == .compraCredito
@@ -633,6 +723,12 @@ struct ImportarEstadoView: View {
         guard puedeImportar else { return }
         let loteID = UUID()
 
+        // Regla de continuidad: antes de introducir el corte nuevo, todos
+        // los pagos que ya existían quedan sellados al estado que estaba
+        // disponible cuando fueron registrados. El corte nuevo no puede
+        // apropiarse de pagos que el banco ya reflejó en su saldo.
+        tarjeta.sellarAsignacionUnicaDePagos()
+
         // 1. El estado de cuenta (la "cuenta del restaurante")
         let calendario = Calendar.current
         let inicioPeriodo: Date
@@ -658,6 +754,9 @@ struct ImportarEstadoView: View {
         estado.huellaPDF = huellaPDF
         estado.archivoOrigen = archivoOrigen
         estado.bancoDetectado = bancoDetectado
+        estado.adeudoPeriodoAnteriorReportado = adeudoPeriodoAnterior
+        estado.cargosYCostosPeriodoReportados = cargosYCostosPeriodo
+        estado.pagosYAbonosPeriodoReportados = pagosYAbonosPeriodo
         contexto.insert(estado)
 
         // 2. Cada movimiento aprobado

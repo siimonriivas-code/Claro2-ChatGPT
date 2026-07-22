@@ -36,6 +36,11 @@ struct ResumenDetectado {
     var pagoParaNoGenerarIntereses: Double?
     var pagoMinimo: Double?
     var saldoAlCorte: Double?
+    // Cadena contable reportada por el banco. En Banamex permite comprobar:
+    // adeudo anterior + cargos/costos - pagos/abonos = nuevo PNGI.
+    var adeudoPeriodoAnterior: Double?
+    var cargosYCostosPeriodo: Double?
+    var pagosYAbonosPeriodo: Double?
     var movimientos: [MovimientoDetectado] = []
     var usoIA: Bool = false
 }
@@ -74,6 +79,7 @@ enum AnalizadorEstadoDeCuenta {
         return texto.contains("HEY BANCO") || texto.contains("HEYBANCO")
             || texto.contains("LIVERPOOL")
             || texto.contains("RAPPICARD")
+            || texto.contains("CITIBANAMEX") || texto.contains("BANAMEX")
     }
 
     private static func esResultadoUtil(_ resultado: ResumenDetectado) -> Bool {
@@ -99,6 +105,9 @@ enum AnalizadorEstadoDeCuenta {
             ?? reglas.pagoParaNoGenerarIntereses
         resultado.pagoMinimo = resultado.pagoMinimo ?? reglas.pagoMinimo
         resultado.saldoAlCorte = resultado.saldoAlCorte ?? reglas.saldoAlCorte
+        resultado.adeudoPeriodoAnterior = reglas.adeudoPeriodoAnterior
+        resultado.cargosYCostosPeriodo = reglas.cargosYCostosPeriodo
+        resultado.pagosYAbonosPeriodo = reglas.pagosYAbonosPeriodo
         if resultado.movimientos.isEmpty {
             resultado.movimientos = reglas.movimientos
         }
@@ -270,6 +279,8 @@ enum AnalizadorEstadoDeCuenta {
         let esHeyBanco = textoNormalizado.contains("HEY BANCO")
             || textoNormalizado.contains("HEYBANCO")
         let esRappiCard = textoNormalizado.contains("RAPPICARD")
+        let esBanamex = textoNormalizado.contains("CITIBANAMEX")
+            || textoNormalizado.contains("BANAMEX")
 
         // En Hey Banco la capa digital conserva con precisión el cuadro de
         // pago, pero sus tablas necesitan OCR. El extractor entrega ambas
@@ -320,6 +331,29 @@ enum AnalizadorEstadoDeCuenta {
                 ["SALDO DEUDOR TOTAL", "SALDO ACTUAL AL CORTE", "SALDO AL CORTE",
                  "SALDO ACTUAL", "SALDO TOTAL"],
                 excluyendo: [], en: textoDeResumen)
+        }
+
+        if esBanamex {
+            resultado.adeudoPeriodoAnterior = montoCercaIncluyendoCero(
+                ["ADEUDO DEL PERIODO ANTERIOR"], en: textoDeResumen)
+            let componentes: [Double?] = [
+                montoCercaIncluyendoCero(
+                    ["CARGOS REGULARES (NO A MESES)"], en: textoDeResumen),
+                montoCercaIncluyendoCero(
+                    ["CARGOS COMPRAS A MESES (CAPITAL)"], en: textoDeResumen),
+                montoCercaIncluyendoCero(
+                    ["MONTO DE INTERESES"], en: textoDeResumen),
+                montoCercaIncluyendoCero(
+                    ["MONTO DE COMISIONES"], en: textoDeResumen),
+                montoCercaIncluyendoCero(
+                    ["IVA DE INTERESES Y COMISIONES"], en: textoDeResumen)
+            ]
+            if componentes.allSatisfy({ $0 != nil }) {
+                resultado.cargosYCostosPeriodo = componentes
+                    .compactMap { $0 }.reduce(0, +).redondeadoAMoneda
+            }
+            resultado.pagosYAbonosPeriodo = montoCercaIncluyendoCero(
+                ["PAGOS Y ABONOS"], en: textoDeResumen)
         }
 
         // Para fechas sin año (Liverpool escribe "03-JUL"), usamos el del corte
@@ -907,6 +941,33 @@ enum AnalizadorEstadoDeCuenta {
                     break
                 }
                 if let monto = primerMonto(en: lineas[candidato]), monto > 0 {
+                    return monto
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Variante contable: $0.00 es un dato válido, no ausencia. Se usa en
+    /// tablas cuya ecuación debe cerrar incluyendo componentes en cero.
+    private static func montoCercaIncluyendoCero(
+        _ claves: [String], en texto: String) -> Double? {
+        let lineas = texto.components(separatedBy: .newlines)
+        let clavesNormalizadas = claves.map { normalizarParaBusqueda($0) }
+        for indice in lineas.indices {
+            let lineaNormalizada = normalizarParaBusqueda(lineas[indice])
+            guard clavesNormalizadas.contains(where: {
+                lineaNormalizada.contains($0)
+            }) else { continue }
+
+            let limite = min(lineas.count - 1, indice + 3)
+            for candidato in indice...limite {
+                if candidato > indice,
+                   esEtiquetaDeResumen(
+                    normalizarParaBusqueda(lineas[candidato])) {
+                    break
+                }
+                if let monto = primerMonto(en: lineas[candidato]) {
                     return monto
                 }
             }

@@ -82,7 +82,60 @@ final class PaymentSynchronizationRegressionTests: XCTestCase {
         XCTAssertEqual(vigente.situacion, .cubierto)
     }
 
+    func testPagoAnteriorNoCubreElEstadoImportadoDespues() {
+        let tarjeta = TarjetaCredito(
+            nombre: "Prueba", limiteCredito: 66_000,
+            diaCorte: 17, diaLimitePago: 10,
+            fechaSaldoInicial: fecha(2026, 1, 1))
+        let anterior = EstadoDeCuenta(
+            fechaCorte: fecha(2026, 6, 17),
+            fechaLimitePago: fecha(2026, 7, 10),
+            inicioPeriodo: fecha(2026, 5, 18),
+            finPeriodo: fecha(2026, 6, 17),
+            pagoParaNoGenerarIntereses: 11_297.44,
+            pagoMinimo: 900, saldoAlCorte: 11_297.44,
+            tarjeta: tarjeta)
+        anterior.registradoEl = fecha(2026, 6, 18)
+
+        let pagoAnterior = Movimiento(
+            tipo: .pagoTarjeta, monto: 11_297.44,
+            fecha: fecha(2026, 7, 18),
+            detalle: "Pago capturado antes del nuevo estado",
+            tarjeta: tarjeta)
+        pagoAnterior.creadoEl = fecha(2026, 7, 19)
+
+        tarjeta.estadosDeCuenta = [anterior]
+        tarjeta.movimientos = [pagoAnterior]
+        tarjeta.sellarAsignacionUnicaDePagos()
+
+        let nuevo = EstadoDeCuenta(
+            fechaCorte: fecha(2026, 7, 17),
+            fechaLimitePago: fecha(2026, 8, 10),
+            inicioPeriodo: fecha(2026, 6, 18),
+            finPeriodo: fecha(2026, 7, 17),
+            pagoParaNoGenerarIntereses: 6_295.08,
+            pagoMinimo: 830, saldoAlCorte: 6_295.08,
+            tarjeta: tarjeta)
+        nuevo.registradoEl = fecha(2026, 7, 21)
+        tarjeta.estadosDeCuenta.append(nuevo)
+
+        XCTAssertTrue(Calendar.current.isDate(
+            pagoAnterior.fechaCorteObjetivoPago!,
+            inSameDayAs: anterior.fechaCorte))
+        XCTAssertEqual(anterior.pagadoDelPeriodo, 11_297.44, accuracy: 0.001)
+        XCTAssertEqual(anterior.faltaPorCubrir, 0, accuracy: 0.001)
+        XCTAssertEqual(nuevo.pagadoDelPeriodo, 0, accuracy: 0.001)
+        XCTAssertEqual(nuevo.faltaPorCubrir, 6_295.08, accuracy: 0.001)
+        XCTAssertEqual(nuevo.pagoMinimoPendiente, 830, accuracy: 0.001)
+        XCTAssertEqual(nuevo.situacion, .pendiente)
+    }
+
     private func fecha(relativaA base: Date, dias: Int) -> Date {
         calendario.date(byAdding: .day, value: dias, to: base)!
+    }
+
+    private func fecha(_ anio: Int, _ mes: Int, _ dia: Int) -> Date {
+        calendario.date(from: DateComponents(
+            year: anio, month: mes, day: dia))!
     }
 }

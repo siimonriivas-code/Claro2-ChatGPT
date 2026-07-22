@@ -3,7 +3,7 @@ import SwiftData
 
 enum MigradorDatosClaro {
     private static let clave = "versionModeloDatosClaro"
-    static let versionActual = 5
+    static let versionActual = 6
 
     /// Las etapas son idempotentes: interrumpir la app no deja una migración
     /// a medias y volver a abrirla es seguro.
@@ -44,6 +44,20 @@ enum MigradorDatosClaro {
                 try repararPagosReutilizados(contexto: contexto)
                 try contexto.save()
                 version = 5
+                UserDefaults.standard.set(version, forKey: clave)
+            } catch {
+                return
+            }
+        }
+        if version < 6 {
+            do {
+                let tarjetas = try contexto.fetch(
+                    FetchDescriptor<TarjetaCredito>())
+                for tarjeta in tarjetas {
+                    tarjeta.sellarAsignacionUnicaDePagos()
+                }
+                try contexto.save()
+                version = 6
                 UserDefaults.standard.set(version, forKey: clave)
             } catch {
                 return

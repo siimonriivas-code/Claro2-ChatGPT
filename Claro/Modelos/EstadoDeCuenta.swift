@@ -29,6 +29,16 @@ final class EstadoDeCuenta {
     var archivoOrigen: String? = nil
     var bancoDetectado: String? = nil
 
+    // Momento en que este corte entró a Claro. Permite reconstruir qué
+    // estado estaba vigente cuando se capturó un pago, aunque el usuario
+    // haya elegido una fecha distinta para ese movimiento.
+    var registradoEl: Date? = nil
+
+    // Evidencia de conciliación extraída del resumen bancario.
+    var adeudoPeriodoAnteriorReportado: Double? = nil
+    var cargosYCostosPeriodoReportados: Double? = nil
+    var pagosYAbonosPeriodoReportados: Double? = nil
+
     var tarjeta: TarjetaCredito?
 
     // Mensualidades MSI que el banco incluyó en este corte.
@@ -53,5 +63,6 @@ final class EstadoDeCuenta {
         self.pagoMinimo = pagoMinimo.redondeadoAMoneda
         self.saldoAlCorte = saldoAlCorte.redondeadoAMoneda
         self.tarjeta = tarjeta
+        self.registradoEl = .now
     }
 }

@@ -2,6 +2,42 @@ import XCTest
 @testable import Claro
 
 final class StatementImportRegressionTests: XCTestCase {
+    func testBanamexExtraeCadenaContableDelPeriodo() async {
+        let texto = """
+        BANAMEX
+        Fecha de corte: 17-jul-2026
+        Fecha límite de pago: lunes, 10-ago-2026
+        Pago para no generar intereses: $6,295.08
+        Pago mínimo: $830.00
+        Saldo deudor total: $6,295.08
+        RESUMEN DE CARGOS Y ABONOS DEL PERIODO
+        Adeudo del periodo anterior = $11,297.44
+        Cargos regulares (no a meses) + $6,307.08
+        Cargos compras a meses (capital) + $0.00
+        Monto de Intereses + $0.00
+        Monto de comisiones + $0.00
+        IVA de Intereses y comisiones + $0.00
+        Pagos y abonos - $11,309.44
+        """
+
+        let resultado = await AnalizadorEstadoDeCuenta.analizar(
+            paginas: [texto])
+        XCTAssertEqual(resultado.adeudoPeriodoAnterior!,
+                       11_297.44, accuracy: 0.001)
+        XCTAssertEqual(resultado.cargosYCostosPeriodo!,
+                       6_307.08, accuracy: 0.001)
+        XCTAssertEqual(resultado.pagosYAbonosPeriodo!,
+                       11_309.44, accuracy: 0.001)
+        let comprobacion = ConciliadorEstadoCuenta.verificar(
+            adeudoAnterior: resultado.adeudoPeriodoAnterior!,
+            cargosYCostos: resultado.cargosYCostosPeriodo!,
+            pagosYAbonos: resultado.pagosYAbonosPeriodo!,
+            nuevoPagoParaNoGenerarIntereses:
+                resultado.pagoParaNoGenerarIntereses!)
+        XCTAssertTrue(comprobacion.esCoherente)
+        XCTAssertEqual(comprobacion.saldoEsperado, 6_295.08, accuracy: 0.001)
+    }
+
 
     func testHeyBancoConservaResumenYReconstruyeMovimientos() async {
         let digital = """

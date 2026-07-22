@@ -10,6 +10,42 @@
 
 import Foundation
 
+// MARK: - Conciliación entre cortes
+
+nonisolated struct VerificacionContableEstado {
+    let saldoEsperado: Double
+    let diferencia: Double
+    var esCoherente: Bool { abs(diferencia) <= 1.0 }
+}
+
+nonisolated enum ConciliadorEstadoCuenta {
+    private static func moneda(_ valor: Double) -> Double {
+        (valor * 100).rounded() / 100
+    }
+
+    /// Comprueba la ecuación impresa por el banco antes de guardar el corte.
+    static func verificar(adeudoAnterior: Double,
+                          cargosYCostos: Double,
+                          pagosYAbonos: Double,
+                          nuevoPagoParaNoGenerarIntereses: Double)
+        -> VerificacionContableEstado {
+        let esperado = moneda(max(0, adeudoAnterior + cargosYCostos - pagosYAbonos))
+        return VerificacionContableEstado(
+            saldoEsperado: esperado,
+            diferencia: moneda(nuevoPagoParaNoGenerarIntereses - esperado))
+    }
+
+    /// En Banamex, el adeudo anterior del documento nuevo debe ser el PNGI
+    /// que informó el corte previo. El pago posterior explica su liquidación,
+    /// pero no modifica la cifra histórica que abre el siguiente resumen.
+    static func diferenciaConCorteAnterior(
+        adeudoAnteriorReportado: Double,
+        corteAnterior: EstadoDeCuenta) -> Double {
+        moneda(adeudoAnteriorReportado
+            - corteAnterior.pagoParaNoGenerarIntereses)
+    }
+}
+
 // MARK: - Cálculos de la tarjeta
 
 extension TarjetaCredito {
@@ -49,6 +85,49 @@ extension TarjetaCredito {
         return compras
             .filter { $0.fecha > ultimoCorte }
             .sorted { $0.fecha > $1.fecha }
+    }
+
+    /// Convierte los pagos creados por versiones anteriores en asignaciones
+    /// de un solo corte. Primero reconstruye qué estado ya existía cuando se
+    /// capturó el pago; si no hay metadatos antiguos suficientes, conserva la
+    /// ventana histórica por fecha. Una vez sellado, un pago jamás puede
+    /// saltar al estado que se importe después.
+    @discardableResult
+    func sellarAsignacionUnicaDePagos() -> Int {
+        let estados = estadosDeCuenta.sorted { $0.fechaCorte < $1.fechaCorte }
+        guard !estados.isEmpty else { return 0 }
+
+        let registrosConocidos: [(estado: EstadoDeCuenta, fecha: Date)] =
+            estados.compactMap { estado in
+                if let fecha = estado.registradoEl {
+                    return (estado, fecha)
+                }
+                guard let lote = estado.importacionID,
+                      let fecha = movimientos
+                        .filter({ $0.importacionID == lote })
+                        .map(\.creadoEl).min()
+                else { return nil }
+                return (estado, fecha)
+            }
+
+        var sellados = 0
+        for pago in movimientos
+            where pago.tipo == .pagoTarjeta
+                && pago.fechaCorteObjetivoPago == nil {
+            let vigenteAlRegistrarlo = registrosConocidos
+                .filter { $0.fecha <= pago.creadoEl }
+                .max { $0.fecha < $1.fecha }?.estado
+            let correspondientePorFecha = estados
+                .last { $0.fechaCorte <= pago.fecha }
+            guard let objetivo = vigenteAlRegistrarlo
+                    ?? correspondientePorFecha
+                    ?? estados.first
+            else { continue }
+
+            pago.fechaCorteObjetivoPago = objetivo.fechaCorte
+            sellados += 1
+        }
+        return sellados
     }
 }
 

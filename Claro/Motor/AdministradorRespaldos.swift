@@ -87,6 +87,10 @@ struct EstadoDTO: Codable {
     let fechaCorte, fechaLimitePago, inicioPeriodo, finPeriodo: Date
     let pagoParaNoGenerarIntereses, pagoMinimo, saldoAlCorte: Double
     let importacionID: UUID?; let huellaPDF, archivoOrigen, bancoDetectado: String?
+    let registradoEl: Date?
+    let adeudoPeriodoAnteriorReportado: Double?
+    let cargosYCostosPeriodoReportados: Double?
+    let pagosYAbonosPeriodoReportados: Double?
 }
 struct PlanDTO: Codable {
     let id: UUID; let tarjetaID: UUID?; let detalle: String
@@ -187,7 +191,11 @@ enum AdministradorRespaldos {
                 pagoParaNoGenerarIntereses: $0.pagoParaNoGenerarIntereses,
                 pagoMinimo: $0.pagoMinimo, saldoAlCorte: $0.saldoAlCorte,
                 importacionID: $0.importacionID, huellaPDF: $0.huellaPDF,
-                archivoOrigen: $0.archivoOrigen, bancoDetectado: $0.bancoDetectado) },
+                archivoOrigen: $0.archivoOrigen, bancoDetectado: $0.bancoDetectado,
+                registradoEl: $0.registradoEl,
+                adeudoPeriodoAnteriorReportado: $0.adeudoPeriodoAnteriorReportado,
+                cargosYCostosPeriodoReportados: $0.cargosYCostosPeriodoReportados,
+                pagosYAbonosPeriodoReportados: $0.pagosYAbonosPeriodoReportados) },
             planes: planes.map { PlanDTO(id: planID[$0.persistentModelID]!,
                 tarjetaID: referencia($0.tarjeta, en: tarjetaID), detalle: $0.detalle,
                 montoTotal: $0.montoTotal, numeroMeses: $0.numeroMeses,
@@ -342,6 +350,13 @@ enum AdministradorRespaldos {
                 tarjeta: dto.tarjetaID.flatMap { tarjetas[$0] })
             modelo.importacionID = dto.importacionID; modelo.huellaPDF = dto.huellaPDF
             modelo.archivoOrigen = dto.archivoOrigen; modelo.bancoDetectado = dto.bancoDetectado
+            modelo.registradoEl = dto.registradoEl
+            modelo.adeudoPeriodoAnteriorReportado =
+                dto.adeudoPeriodoAnteriorReportado
+            modelo.cargosYCostosPeriodoReportados =
+                dto.cargosYCostosPeriodoReportados
+            modelo.pagosYAbonosPeriodoReportados =
+                dto.pagosYAbonosPeriodoReportados
             contexto.insert(modelo); estados[dto.id] = modelo
         }
         for dto in respaldo.planes {
