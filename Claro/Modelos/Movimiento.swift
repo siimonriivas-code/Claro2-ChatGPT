@@ -44,6 +44,11 @@ final class Movimiento {
     // opcional para conservar sin cambios los datos de versiones anteriores.
     var importacionID: UUID? = nil
 
+    // El corte que estaba vigente cuando se registró un pago de tarjeta.
+    // Evita que, al importar el siguiente estado, ese mismo pago se aplique
+    // otra vez solo porque su fecha capturada quedó después del nuevo corte.
+    var fechaCorteObjetivoPago: Date? = nil
+
     // Vínculos (todos opcionales: cada tipo de movimiento usa los que necesita)
     var cuenta: CuentaBancaria?        // cuenta principal (de donde sale o entra dinero)
     var cuentaDestino: CuentaBancaria? // solo transferencias: cuenta que recibe

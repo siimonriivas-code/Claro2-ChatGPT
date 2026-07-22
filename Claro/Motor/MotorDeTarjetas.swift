@@ -96,10 +96,20 @@ extension EstadoDeCuenta {
         let finExclusivo = min(siguienteCorte ?? .distantFuture, finReferencia)
 
         return tarjeta.movimientos
-            .filter { $0.cuentaParaCalculos
-                   && $0.tipo == .pagoTarjeta
-                   && $0.fecha >= inicio
-                   && $0.fecha < finExclusivo }
+            .filter { movimiento in
+                guard movimiento.cuentaParaCalculos,
+                      movimiento.tipo == .pagoTarjeta,
+                      movimiento.fecha < finReferencia else { return false }
+
+                if let corteObjetivo = movimiento.fechaCorteObjetivoPago {
+                    return calendario.isDate(corteObjetivo,
+                                              inSameDayAs: fechaCorte)
+                }
+                // Compatibilidad con pagos creados antes de que existiera la
+                // asociación explícita al corte.
+                return movimiento.fecha >= inicio
+                    && movimiento.fecha < finExclusivo
+            }
             .reduce(0) { $0 + $1.monto }
             .redondeadoAMoneda
     }

@@ -103,6 +103,7 @@ struct MovimientoDTO: Codable {
     let planID, deudaID: UUID?
     let tipoRaw: String; let monto: Double; let fecha: Date; let detalle, estadoRaw: String
     let creadoEl, editadoEl: Date?; let importacionID: UUID?
+    let fechaCorteObjetivoPago: Date?
 }
 struct CompartidaDTO: Codable {
     struct ParteDTO: Codable {
@@ -208,7 +209,8 @@ enum AdministradorRespaldos {
                 deudaID: referencia($0.deuda, en: deudaID), tipoRaw: $0.tipoRaw,
                 monto: $0.monto, fecha: $0.fecha, detalle: $0.detalle,
                 estadoRaw: $0.estadoRaw, creadoEl: $0.creadoEl,
-                editadoEl: $0.editadoEl, importacionID: $0.importacionID) },
+                editadoEl: $0.editadoEl, importacionID: $0.importacionID,
+                fechaCorteObjetivoPago: $0.fechaCorteObjetivoPago) },
             compartidas: movimientos.compactMap { movimiento in
                 guard let compartida = movimiento.compraCompartida,
                       let id = movimientoID[movimiento.persistentModelID] else { return nil }
@@ -371,6 +373,7 @@ enum AdministradorRespaldos {
             modelo.tipoRaw = dto.tipoRaw; modelo.estadoRaw = dto.estadoRaw
             modelo.creadoEl = dto.creadoEl ?? dto.fecha; modelo.editadoEl = dto.editadoEl
             modelo.importacionID = dto.importacionID
+            modelo.fechaCorteObjetivoPago = dto.fechaCorteObjetivoPago
             contexto.insert(modelo); movimientos[dto.id] = modelo
         }
         for dto in respaldo.compartidas {

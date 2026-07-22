@@ -149,6 +149,8 @@ struct PagoTarjetaView: View {
                             detalle: detalle.trimmingCharacters(in: .whitespaces),
                             cuenta: cuentaOrigen,
                             tarjeta: tarjetaSeleccionada)
+                        movimiento.fechaCorteObjetivoPago =
+                            tarjetaSeleccionada?.estadoDeCuentaVigente?.fechaCorte
                         contexto.insert(movimiento)
                         try? contexto.save()
                         if notificacionesActivadas {
