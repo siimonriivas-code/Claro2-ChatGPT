@@ -8,6 +8,7 @@
 //
 
 import Combine
+import CloudKit
 import Foundation
 import UIKit
 import UserNotifications
@@ -61,6 +62,24 @@ final class DelegadoAplicacionClaro: NSObject,
         return true
     }
 
+    /// SwiftUI no crea un delegado de escena por sí solo. CloudKit entrega
+    /// aquí las invitaciones aceptadas, por lo que configuramos uno sin
+    /// sustituir ni administrar la ventana que SwiftUI crea.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuracion = UISceneConfiguration(
+            name: nil,
+            sessionRole: connectingSceneSession.role
+        )
+        if connectingSceneSession.role == .windowApplication {
+            configuracion.delegateClass = DelegadoEscenaClaro.self
+        }
+        return configuracion
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
@@ -77,6 +96,33 @@ final class DelegadoAplicacionClaro: NSObject,
         let datos = response.notification.request.content.userInfo
         await MainActor.run {
             EnrutadorDeNotificaciones.compartido.abrir(datos: datos)
+        }
+    }
+}
+
+/// Recibe una invitación tanto si Claro estaba abierto como si iOS lo lanzó
+/// desde el enlace de CloudKit.
+final class DelegadoEscenaClaro: UIResponder, UIWindowSceneDelegate {
+    func scene(
+        _ scene: UIScene,
+        willConnectTo session: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        if let metadata = connectionOptions.cloudKitShareMetadata {
+            aceptar(metadata)
+        }
+    }
+
+    func windowScene(
+        _ windowScene: UIWindowScene,
+        userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
+    ) {
+        aceptar(cloudKitShareMetadata)
+    }
+
+    private func aceptar(_ metadata: CKShare.Metadata) {
+        Task { @MainActor in
+            await AdministradorClaroFamilia.aceptar(metadata)
         }
     }
 }

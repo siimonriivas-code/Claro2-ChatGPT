@@ -362,6 +362,7 @@
 				DEVELOPMENT_TEAM = 5C25U7933W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Claro-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Claro;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Claro usa Face ID para proteger tus finanzas";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claro usa el micrófono para recibir tus preguntas financieras por voz";
@@ -401,6 +402,7 @@
 				DEVELOPMENT_TEAM = 5C25U7933W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Claro-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Claro;
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Claro usa Face ID para proteger tus finanzas";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claro usa el micrófono para recibir tus preguntas financieras por voz";

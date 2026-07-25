@@ -28,6 +28,57 @@ struct PersonasView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     NavigationLink {
+                        ClaroFamiliaView()
+                    } label: {
+                        HStack(spacing: 14) {
+                            OrbeClaro(
+                                icono: "person.2.badge.key.fill",
+                                color: Tema.acento,
+                                lado: 48
+                            )
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Claro Familia")
+                                    .font(.headline)
+                                    .foregroundStyle(Tema.textoPrincipal)
+                                Text("Comparte desgloses y confirma pagos")
+                                    .font(.caption)
+                                    .foregroundStyle(Tema.textoSecundario)
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Tema.acento)
+                        }
+                        .padding(17)
+                        .background(
+                            LinearGradient(
+                                colors: [
+                                    Tema.acento.opacity(0.16),
+                                    Tema.positivo.opacity(0.08),
+                                    Tema.panel
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            in: RoundedRectangle(
+                                cornerRadius: 24,
+                                style: .continuous
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(
+                                cornerRadius: 24,
+                                style: .continuous
+                            )
+                            .strokeBorder(
+                                Tema.acento.opacity(0.25),
+                                lineWidth: 0.8
+                            )
+                        )
+                    }
+                    .buttonStyle(Presionable())
+
+                    NavigationLink {
                         GastosCompartidosView()
                     } label: {
                         HStack(spacing: 14) {

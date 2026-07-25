@@ -11,6 +11,7 @@ import SwiftData
 
 struct CobroRecibidoView: View {
     var personaInicial: Persona? = nil
+    var alGuardar: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
@@ -24,9 +25,19 @@ struct CobroRecibidoView: View {
     @State private var detalle = ""
     @State private var errorGuardado: String?
 
-    init(personaInicial: Persona? = nil) {
+    init(
+        personaInicial: Persona? = nil,
+        montoInicial: Double? = nil,
+        fechaInicial: Date = .now,
+        detalleInicial: String = "",
+        alGuardar: (() -> Void)? = nil
+    ) {
         self.personaInicial = personaInicial
+        self.alGuardar = alGuardar
+        _monto = State(initialValue: montoInicial)
         _personaSeleccionada = State(initialValue: personaInicial)
+        _fecha = State(initialValue: fechaInicial)
+        _detalle = State(initialValue: detalleInicial)
     }
 
     private var puedeGuardar: Bool {
@@ -160,6 +171,7 @@ struct CobroRecibidoView: View {
                     persona: persona))
             }
             try CoordinadorOperacionesClaro.guardar(contexto: contexto)
+            alGuardar?()
             cerrar()
         } catch {
             contexto.rollback()
