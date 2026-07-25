@@ -31,4 +31,59 @@ final class PersonExcessIncomeTests: XCTestCase {
         XCTAssertEqual(persona.totalExcedenteRecibido, 50, accuracy: 0.001)
         XCTAssertEqual(persona.totalQueTeHaPagado, 150, accuracy: 0.001)
     }
+
+    func testResumenCompartidoExplicaComprasPagosYPendiente() {
+        let persona = Persona(nombre: "Hermano")
+        let tarjeta = TarjetaCredito(
+            nombre: "BBVA Azul", limiteCredito: 30_000,
+            diaCorte: 10, diaLimitePago: 28)
+
+        let supermercado = Movimiento(
+            tipo: .compraCredito, monto: 800,
+            fecha: fecha(2026, 7, 3), detalle: "Supermercado",
+            tarjeta: tarjeta)
+        let compraSupermercado = CompraCompartida()
+        compraSupermercado.movimiento = supermercado
+        supermercado.compraCompartida = compraSupermercado
+        let parteSupermercado = Participacion(
+            monto: 400, persona: persona, compra: compraSupermercado)
+        compraSupermercado.participaciones = [parteSupermercado]
+
+        let celular = Movimiento(
+            tipo: .compraCredito, monto: 6_000,
+            fecha: fecha(2026, 5, 10), detalle: "Celular",
+            tarjeta: tarjeta)
+        let plan = PlanMSI(
+            detalle: "Celular", montoTotal: 6_000, numeroMeses: 6,
+            fechaCompra: celular.fecha, tarjeta: tarjeta)
+        celular.planMSI = plan
+        let compraCelular = CompraCompartida()
+        compraCelular.movimiento = celular
+        celular.compraCompartida = compraCelular
+        let mesUno = Participacion(
+            monto: 500, persona: persona, compra: compraCelular)
+        let mesDos = Participacion(
+            monto: 500, persona: persona, compra: compraCelular)
+        compraCelular.participaciones = [mesUno, mesDos]
+
+        persona.participaciones = [parteSupermercado, mesUno, mesDos]
+        persona.movimientos = [
+            Movimiento(tipo: .cobroRecibido, monto: 300,
+                       fecha: fecha(2026, 7, 15), persona: persona)
+        ]
+
+        let resumen = GeneradorResumenCobro.texto(para: persona)
+
+        XCTAssertTrue(resumen.contains("Supermercado"))
+        XCTAssertTrue(resumen.contains("BBVA Azul"))
+        XCTAssertTrue(resumen.contains("2 mensualidades MSI registradas"))
+        XCTAssertTrue(resumen.contains("Subtotal de tus partes: $1,400.00"))
+        XCTAssertTrue(resumen.contains("Pagos ya registrados: −$300.00"))
+        XCTAssertTrue(resumen.contains("Total pendiente: $1,100.00"))
+    }
+
+    private func fecha(_ ano: Int, _ mes: Int, _ dia: Int) -> Date {
+        Calendar(identifier: .gregorian).date(from: DateComponents(
+            year: ano, month: mes, day: dia, hour: 12))!
+    }
 }

@@ -77,7 +77,7 @@ struct PersonaDetalleView: View {
 
                 HStack(spacing: 10) {
                     ShareLink(item: mensajeDeCobro) {
-                        Label("Compartir cobro", systemImage: "square.and.arrow.up")
+                        Label("Compartir desglose", systemImage: "square.and.arrow.up")
                             .font(.footnote.weight(.semibold))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 11)
@@ -213,7 +213,7 @@ struct PersonaDetalleView: View {
     }
 
     private var mensajeDeCobro: String {
-        "Hola, \(persona.nombre). Te comparto el recordatorio del saldo pendiente de \(max(0, persona.saldoPendiente).comoDinero). Gracias."
+        GeneradorResumenCobro.texto(para: persona)
     }
 }
 
