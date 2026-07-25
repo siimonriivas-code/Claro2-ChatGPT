@@ -21,7 +21,8 @@ struct NuevaCompraCreditoView: View {
     @State private var monto: Double?
     @State private var tarjetaSeleccionada: TarjetaCredito?
     @State private var categoriaSeleccionada: Categoria?
-    @State private var fecha: Date = .now
+    @State private var fecha: Date =
+        FechaAnalisisClaro.fechaPredeterminadaParaOperacion
     @State private var detalle = ""
 
     // MSI / a meses

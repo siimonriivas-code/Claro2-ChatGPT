@@ -18,6 +18,9 @@ struct RaizView: View {
     @AppStorage("notificacionesActivadas") private var notificacionesActivadas = false
     @AppStorage("permisoNotificacionesSolicitado") private var permisoNotificacionesSolicitado = false
     @AppStorage("respaldoICloudAutomatico") private var respaldoICloudAutomatico = true
+    @AppStorage("modoHistoricoActivo") private var modoHistoricoActivo = false
+    @AppStorage("fechaAnalisisReferencia")
+    private var fechaAnalisisReferencia = Date.now.timeIntervalSince1970
 
     @Query(filter: #Predicate<TarjetaCredito> { !$0.archivada }) private var tarjetas: [TarjetaCredito]
     @Query(filter: #Predicate<Persona> { !$0.archivada }) private var personas: [Persona]
@@ -48,6 +51,34 @@ struct RaizView: View {
                     .tabItem { Label("Análisis", systemImage: "chart.bar.xaxis") }
             }
             .tint(Tema.positivo)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if modoHistoricoActivo {
+                    HStack(spacing: 10) {
+                        Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                        Text(
+                            "Periodo histórico · "
+                            + Date(
+                                timeIntervalSince1970:
+                                    fechaAnalisisReferencia
+                            ).formatted(
+                                date: .abbreviated,
+                                time: .omitted
+                            )
+                        )
+                        .font(.caption.weight(.semibold))
+                        Spacer()
+                        Button("Volver a hoy") {
+                            FechaAnalisisClaro.volverAHoy()
+                            modoHistoricoActivo = false
+                        }
+                        .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(Tema.advertencia)
+                    .padding(.horizontal, 14)
+                    .frame(height: 38)
+                    .background(Tema.advertencia.opacity(0.12))
+                }
+            }
             // Al cambiar el modo privacidad, toda la app se redibuja
             // (con un fundido suave para que no se sienta el golpe)
             .id(montosOcultos)
@@ -85,6 +116,9 @@ struct RaizView: View {
         .task {
             MigradorDatosClaro.ejecutarSiHaceFalta(contexto: contexto)
             Sembrador.sembrarSiHaceFalta(contexto: contexto)
+            FechaAnalisisClaro.alinearUnaVezConPeriodoActual(
+                tarjetas: tarjetas
+            )
             _ = try? AdministradorProteccionDatos.crearPuntoSiCorresponde(
                 contexto: contexto
             )

@@ -17,7 +17,8 @@ struct NuevaDeudaView: View {
 
     @State private var acreedor = ""
     @State private var monto: Double?
-    @State private var fecha: Date = .now
+    @State private var fecha: Date =
+        FechaAnalisisClaro.fechaPredeterminadaParaOperacion
     @State private var notas = ""
     @State private var tasaAnual: Double?
     @State private var cat: Double?
@@ -93,7 +94,8 @@ struct AbonoDeudaView: View {
     @State private var monto: Double?
     @State private var deudaSeleccionada: Deuda?
     @State private var cuentaOrigen: CuentaBancaria?
-    @State private var fecha: Date = .now
+    @State private var fecha: Date =
+        FechaAnalisisClaro.fechaPredeterminadaParaOperacion
     @State private var detalle = ""
 
     init(deudaInicial: Deuda? = nil) {

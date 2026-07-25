@@ -4,6 +4,52 @@ import XCTest
 final class PaymentSynchronizationRegressionTests: XCTestCase {
     private let calendario = Calendar(identifier: .gregorian)
 
+    func testPagoReduceLaCuentaEnElMismoPeriodo() {
+        let cuenta = CuentaBancaria(
+            nombre: "Débito BBVA",
+            tipo: .debito,
+            saldoInicial: 4_314.35,
+            fechaSaldoInicial: fecha(2026, 7, 1)
+        )
+        let pago = Movimiento(
+            tipo: .pagoTarjeta,
+            monto: 1_200,
+            fecha: fecha(2026, 7, 25),
+            detalle: "Pago de tarjeta",
+            cuenta: cuenta
+        )
+        cuenta.movimientos = [pago]
+
+        XCTAssertEqual(
+            cuenta.saldoCalculado(hasta: fecha(2026, 7, 25)),
+            3_114.35,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            cuenta.saldoCalculado(hasta: fecha(2026, 7, 24)),
+            4_314.35,
+            accuracy: 0.001
+        )
+    }
+
+    func testReconoceCorteActualSinConfundirUnoHistorico() {
+        let hoy = fecha(2026, 7, 25)
+        XCTAssertTrue(
+            FechaAnalisisClaro.perteneceAlPeriodoActual(
+                fechaCorte: fecha(2026, 7, 17),
+                fechaLimite: fecha(2026, 8, 10),
+                hoy: hoy
+            )
+        )
+        XCTAssertFalse(
+            FechaAnalisisClaro.perteneceAlPeriodoActual(
+                fechaCorte: fecha(2025, 7, 17),
+                fechaLimite: fecha(2025, 8, 10),
+                hoy: hoy
+            )
+        )
+    }
+
     func testPagoTardioParcialYCompletoActualizaTodoElSistema() {
         let hoy = calendario.startOfDay(for: .now)
         let corte = fecha(relativaA: hoy, dias: -40)

@@ -789,6 +789,10 @@ struct ImportarEstadoView: View {
 
         do {
             try CoordinadorOperacionesClaro.guardar(contexto: contexto)
+            FechaAnalisisClaro.reconocerCorteImportado(
+                fechaCorte: fechaCorte,
+                fechaLimite: fechaLimite
+            )
             cerrar()
         } catch {
             contexto.rollback()

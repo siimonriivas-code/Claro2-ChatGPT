@@ -58,7 +58,15 @@ struct CuentaDetalleView: View {
             VStack(spacing: 16) {
                 Panel {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("SALDO ACTUAL")
+                        Text(
+                            FechaAnalisisClaro.estaEnModoHistorico
+                                ? "SALDO AL "
+                                    + FechaAnalisisClaro.actual.formatted(
+                                        date: .abbreviated,
+                                        time: .omitted
+                                    ).uppercased()
+                                : "SALDO ACTUAL"
+                        )
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Tema.textoSecundario)
                         Text(cuenta.saldoCalculado.comoDinero)

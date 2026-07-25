@@ -24,7 +24,8 @@ struct NuevoMovimientoView: View {
     @State private var monto: Double?
     @State private var cuentaSeleccionada: CuentaBancaria?
     @State private var categoriaSeleccionada: Categoria?
-    @State private var fecha: Date = .now
+    @State private var fecha: Date =
+        FechaAnalisisClaro.fechaPredeterminadaParaOperacion
     @State private var detalle = ""
 
     // Gasto compartido (servicios, etc.)

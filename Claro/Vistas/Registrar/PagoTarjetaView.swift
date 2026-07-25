@@ -22,20 +22,48 @@ struct PagoTarjetaView: View {
     @State private var tarjetaSeleccionada: TarjetaCredito?
     @State private var cuentaOrigen: CuentaBancaria?
     @State private var estadoObjetivo: EstadoDeCuenta?
-    @State private var fecha: Date = .now
+    @State private var fecha: Date
     @State private var detalle = ""
     @State private var errorGuardado: String?
 
     init(tarjetaInicial: TarjetaCredito? = nil) {
         self.tarjetaInicial = tarjetaInicial
         _tarjetaSeleccionada = State(initialValue: tarjetaInicial)
+        _fecha = State(
+            initialValue: FechaAnalisisClaro
+                .fechaPredeterminadaParaOperacion
+        )
+    }
+
+    private var fechaAnteriorAlSaldoInicial: Bool {
+        guard let cuenta = cuentaOrigen else { return false }
+        return fecha < Calendar.current.startOfDay(
+            for: cuenta.fechaSaldoInicial
+        )
+    }
+
+    private var esPagoProgramado: Bool {
+        let calendario = Calendar.current
+        let referencia = calendario.startOfDay(
+            for: FechaAnalisisClaro.actual
+        )
+        return calendario.startOfDay(for: fecha) > referencia
+    }
+
+    private var saldoDisponibleEnFecha: Double {
+        cuentaOrigen?.saldoCalculado(hasta: fecha) ?? 0
+    }
+
+    private var saldoDespuesDelPago: Double {
+        max(0, saldoDisponibleEnFecha - (monto ?? 0))
+            .redondeadoAMoneda
     }
 
     /// Espejo estricto: si eliges una cuenta, no puedes pagar más
     /// de lo que esa cuenta tiene (igual que en la vida real).
     private var fondosInsuficientes: Bool {
-        guard let cuenta = cuentaOrigen, let m = monto else { return false }
-        return m > cuenta.saldoCalculado
+        guard cuentaOrigen != nil, let m = monto else { return false }
+        return m > saldoDisponibleEnFecha
     }
 
     private var puedeGuardar: Bool {
@@ -43,6 +71,7 @@ struct PagoTarjetaView: View {
         && tarjetaSeleccionada != nil
         && cuentaOrigen != nil          // el pago DEBE salir de una cuenta
         && !fondosInsuficientes
+        && !fechaAnteriorAlSaldoInicial
     }
 
     private var cortesPendientes: [EstadoDeCuenta] {
@@ -133,16 +162,57 @@ struct PagoTarjetaView: View {
                 } header: {
                     Text("Detalles")
                 } footer: {
-                    Text("🪞 Todo pago sale de la cuenta real donde está el dinero. Si solo tienes una, Claro la selecciona automáticamente.")
+                    Text("Todo pago sale de la cuenta seleccionada. Claro usa la misma fecha para el pago, el saldo de débito y el corte.")
+                }
+
+                if let cuenta = cuentaOrigen, let monto, monto > 0,
+                   !fechaAnteriorAlSaldoInicial {
+                    Section("Efecto en \(cuenta.nombre)") {
+                        LabeledContent("Saldo antes") {
+                            Text(saldoDisponibleEnFecha.comoDinero)
+                        }
+                        LabeledContent(
+                            esPagoProgramado
+                                ? "Saldo cuando se ejecute"
+                                : "Saldo después del pago"
+                        ) {
+                            Text(saldoDespuesDelPago.comoDinero)
+                                .fontWeight(.bold)
+                                .foregroundStyle(
+                                    fondosInsuficientes
+                                        ? Tema.urgente
+                                        : Tema.positivo
+                                )
+                        }
+                        if esPagoProgramado {
+                            Label(
+                                "Este pago es posterior al periodo visible. Quedará programado y no reducirá el saldo hasta esa fecha.",
+                                systemImage: "calendar.badge.clock"
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(Tema.advertencia)
+                        }
+                    }
                 }
 
                 // Espejo estricto: sin fondos no hay pago
                 if fondosInsuficientes, let c = cuentaOrigen, let m = monto {
                     Section {
-                        Label("Fondos insuficientes: quieres pagar \(m.comoDinero) pero \(c.nombre) solo tiene \(c.saldoCalculado.comoDinero). Claro es un espejo de tu dinero real: registra primero el ingreso, o paga menos.",
+                        Label("Fondos insuficientes: quieres pagar \(m.comoDinero) pero \(c.nombre) tiene \(saldoDisponibleEnFecha.comoDinero) en la fecha seleccionada. Registra primero el ingreso o paga menos.",
                               systemImage: "nosign")
                             .font(.footnote)
                             .foregroundStyle(Tema.urgente)
+                    }
+                }
+
+                if fechaAnteriorAlSaldoInicial, let cuenta = cuentaOrigen {
+                    Section {
+                        Label(
+                            "La fecha del pago es anterior al saldo inicial de \(cuenta.nombre), registrado el \(cuenta.fechaSaldoInicial.formatted(date: .abbreviated, time: .omitted)). Elige esa fecha o una posterior.",
+                            systemImage: "calendar.badge.exclamationmark"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(Tema.urgente)
                     }
                 }
             }

@@ -156,7 +156,8 @@ private struct RecibirIngresoRecurrenteView: View {
     @Environment(\.modelContext) private var contexto
     @Environment(\.dismiss) private var cerrar
     @State private var monto: Double?
-    @State private var fecha = Date.now
+    @State private var fecha =
+        FechaAnalisisClaro.fechaPredeterminadaParaOperacion
     var body: some View {
         NavigationStack {
             Form {

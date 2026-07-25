@@ -164,6 +164,15 @@ struct NuevoEstadoDeCuentaView: View {
             }
         }
 
-        cerrar()
+        do {
+            try CoordinadorOperacionesClaro.guardar(contexto: contexto)
+            FechaAnalisisClaro.reconocerCorteImportado(
+                fechaCorte: fechaCorte,
+                fechaLimite: fechaLimitePago
+            )
+            cerrar()
+        } catch {
+            contexto.rollback()
+        }
     }
 }

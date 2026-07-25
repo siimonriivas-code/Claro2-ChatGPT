@@ -21,14 +21,14 @@ struct CobroRecibidoView: View {
     @State private var monto: Double?
     @State private var personaSeleccionada: Persona?
     @State private var cuentaDestino: CuentaBancaria?
-    @State private var fecha: Date = .now
+    @State private var fecha: Date
     @State private var detalle = ""
     @State private var errorGuardado: String?
 
     init(
         personaInicial: Persona? = nil,
         montoInicial: Double? = nil,
-        fechaInicial: Date = .now,
+        fechaInicial: Date? = nil,
         detalleInicial: String = "",
         alGuardar: (() -> Void)? = nil
     ) {
@@ -36,7 +36,10 @@ struct CobroRecibidoView: View {
         self.alGuardar = alGuardar
         _monto = State(initialValue: montoInicial)
         _personaSeleccionada = State(initialValue: personaInicial)
-        _fecha = State(initialValue: fechaInicial)
+        _fecha = State(
+            initialValue: fechaInicial
+                ?? FechaAnalisisClaro.fechaPredeterminadaParaOperacion
+        )
         _detalle = State(initialValue: detalleInicial)
     }
 

@@ -19,7 +19,8 @@ struct NuevaCuentaView: View {
     @State private var tipo: TipoCuenta = .debito
     @State private var bancoSeleccionado: Banco?
     @State private var saldoInicial: Double?
-    @State private var fecha: Date = .now
+    @State private var fecha: Date =
+        FechaAnalisisClaro.fechaPredeterminadaParaOperacion
 
     var body: some View {
         NavigationStack {

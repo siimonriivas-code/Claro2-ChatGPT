@@ -87,7 +87,7 @@ struct ConfiguracionView: View {
                                    displayedComponents: .date)
                     }
                 } header: { Text("Análisis histórico") }
-                  footer: { Text("Permite consultar tus finanzas desde una fecha anterior sin modificar movimientos ni fechas guardadas.") }
+                  footer: { Text("En uso normal, todo se registra y calcula con la fecha real. Si activas una prueba histórica, toda operación nueva usará inicialmente la fecha de referencia y una franja visible te recordará que no estás viendo el presente.") }
 
                 Section {
                     NavigationLink { IngresosRecurrentesView() } label: {
