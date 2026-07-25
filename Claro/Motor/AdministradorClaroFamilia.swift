@@ -357,8 +357,11 @@ enum AdministradorClaroFamilia {
                 in: .whitespacesAndNewlines
             ) as CKRecordValue
         registro["actualizadoEl"] = Date.now as CKRecordValue
+        // Claro Familia comparte lo exigible al corte, no compras históricas
+        // ya liquidadas ni movimientos que todavía no aparecen en un corte.
         registro.encryptedValues["saldoPendiente"] =
-            persona.saldoPendiente.redondeadoAMoneda as CKRecordValue
+            GeneradorResumenCobro.montoPendienteAlCorte(para: persona)
+                as CKRecordValue
         registro.encryptedValues["resumenCobro"] =
             GeneradorResumenCobro.texto(para: persona) as CKRecordValue
         if registro.encryptedValues["actualizaciones"] == nil,

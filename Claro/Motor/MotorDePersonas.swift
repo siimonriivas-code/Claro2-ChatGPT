@@ -71,99 +71,374 @@ enum MotorDePersonas {
 
 // MARK: - Comprobante compartible
 
+/// Una línea pendiente del comprobante. La participación conserva el corte
+/// que la generó mediante `importacionID`; así una mensualidad antigua jamás
+/// vuelve a aparecer como si perteneciera al corte vigente.
+private struct ConceptoPendientePersona {
+    let clave: String
+    let detalle: String
+    let fecha: Date
+    let tarjeta: String?
+    let fechaCorte: Date?
+    let etiquetaMSI: String?
+    let clasificacion: ClasificacionCargoPersona
+    var montoOriginal: Double
+    var montoPendiente: Double
+}
+
+private enum ClasificacionCargoPersona: String {
+    case corteVigente
+    case saldoAnterior
+    case otroExigible
+    case sinCortar
+}
+
+private struct CargoPersona {
+    let clave: String
+    let detalle: String
+    let fecha: Date
+    let tarjeta: String?
+    let fechaCorte: Date?
+    let etiquetaMSI: String?
+    let clasificacion: ClasificacionCargoPersona
+    let monto: Double
+    var pendiente: Double
+}
+
+struct ResumenCobroPersona {
+    fileprivate let conceptos: [ConceptoPendientePersona]
+    let cargosCorteVigente: Double
+    let pendienteCorteVigente: Double
+    let saldoAnteriorPendiente: Double
+    let otrosPendientes: Double
+    let comprasSinCortar: Double
+
+    var totalAPagarAhora: Double {
+        (
+            pendienteCorteVigente
+            + saldoAnteriorPendiente
+            + otrosPendientes
+        ).redondeadoAMoneda
+    }
+}
+
 /// Construye el texto que la persona recibirá al compartirle un cobro.
-/// El saldo sigue calculándose con la misma fuente de verdad de Personas:
-/// participaciones activas menos cobros recibidos activos.
+/// Primero aplica todos los cobros registrados a los cargos más antiguos.
+/// Después muestra el corte vigente, arrastra únicamente saldos anteriores
+/// que de verdad continúan pendientes y deja las compras sin cortar fuera
+/// del total exigible.
 enum GeneradorResumenCobro {
-    static func texto(para persona: Persona) -> String {
-        let partes = persona.participaciones.filter {
-            $0.compra?.movimiento?.cuentaParaCalculos ?? false
-        }
-
-        let introduccion = """
-        Hola, \(persona.nombre).
-
-        Te comparto el desglose de lo registrado en Claro para que puedas revisar qué conceptos integran el cobro:
-        """
-
-        guard !partes.isEmpty else {
-            return """
-            \(introduccion)
-
-            No hay compras pendientes registradas a tu nombre.
-
-            Total pendiente: \(dinero(0))
-            """
-        }
-
-        // Las mensualidades de un mismo plan comparten el movimiento ancla.
-        // Se agrupan para que el mensaje sea verificable sin repetir decenas
-        // de veces el mismo comercio.
-        let grupos = Dictionary(grouping: partes) {
-            $0.compra!.movimiento!.id
-        }
-        let conceptos = grupos.values.compactMap { grupo -> ConceptoCobro? in
-            guard let movimiento = grupo.first?.compra?.movimiento else {
-                return nil
-            }
-            return ConceptoCobro(
-                detalle: movimiento.detalle.trimmingCharacters(
-                    in: .whitespacesAndNewlines).isEmpty
-                    ? "Compra compartida"
-                    : movimiento.detalle,
-                fecha: movimiento.fecha,
-                tarjeta: movimiento.tarjeta?.nombre,
-                esMSI: movimiento.planMSI != nil,
-                cantidadPartes: grupo.count,
-                monto: grupo.reduce(0) { $0 + $1.monto })
+    static func calcular(para persona: Persona) -> ResumenCobroPersona {
+        var cargos = persona.participaciones.compactMap {
+            cargo(para: $0)
         }
         .sorted {
-            if $0.fecha == $1.fecha { return $0.detalle < $1.detalle }
+            if $0.fecha == $1.fecha { return $0.clave < $1.clave }
             return $0.fecha < $1.fecha
         }
 
-        let lineas = conceptos.enumerated().map { indice, concepto in
-            var datos: [String] = [fecha(concepto.fecha)]
+        // Los pagos recibidos no tenían una relación con cada compra en las
+        // versiones anteriores. Se concilian con FIFO: primero se liquida lo
+        // más antiguo y nunca se resucita en un comprobante posterior.
+        var pagosDisponibles = persona.totalAplicadoADeuda
+            .redondeadoAMoneda
+        for indice in cargos.indices where pagosDisponibles > 0 {
+            let aplicado = min(cargos[indice].pendiente, pagosDisponibles)
+                .redondeadoAMoneda
+            cargos[indice].pendiente =
+                max(0, cargos[indice].pendiente - aplicado)
+                    .redondeadoAMoneda
+            pagosDisponibles =
+                max(0, pagosDisponibles - aplicado).redondeadoAMoneda
+        }
+
+        let agrupados = agrupar(cargos)
+        let cargosVigentes = cargos
+            .filter { $0.clasificacion == .corteVigente }
+            .reduce(0) { $0 + $1.monto }
+            .redondeadoAMoneda
+
+        func pendiente(_ clasificacion: ClasificacionCargoPersona) -> Double {
+            cargos
+                .filter { $0.clasificacion == clasificacion }
+                .reduce(0) { $0 + $1.pendiente }
+                .redondeadoAMoneda
+        }
+
+        return ResumenCobroPersona(
+            conceptos: agrupados,
+            cargosCorteVigente: cargosVigentes,
+            pendienteCorteVigente: pendiente(.corteVigente),
+            saldoAnteriorPendiente: pendiente(.saldoAnterior),
+            otrosPendientes: pendiente(.otroExigible),
+            comprasSinCortar: pendiente(.sinCortar)
+        )
+    }
+
+    static func montoPendienteAlCorte(para persona: Persona) -> Double {
+        calcular(para: persona).totalAPagarAhora
+    }
+
+    static func texto(para persona: Persona) -> String {
+        let resumen = calcular(para: persona)
+        var secciones: [String] = ["""
+        Hola, \(persona.nombre).
+
+        Te comparto únicamente lo pendiente de los cortes vigentes. Las compras de cortes ya liquidados no se vuelven a cobrar.
+        """]
+
+        agregarSeccion(
+            titulo: "CORTES VIGENTES",
+            clasificacion: .corteVigente,
+            conceptos: resumen.conceptos,
+            en: &secciones
+        )
+        agregarSeccion(
+            titulo: "SALDO ANTERIOR REALMENTE PENDIENTE",
+            clasificacion: .saldoAnterior,
+            conceptos: resumen.conceptos,
+            en: &secciones
+        )
+        agregarSeccion(
+            titulo: "OTROS CARGOS PENDIENTES",
+            clasificacion: .otroExigible,
+            conceptos: resumen.conceptos,
+            en: &secciones
+        )
+
+        if resumen.totalAPagarAhora == 0 {
+            secciones.append(
+                "Estado: cubierto. No tienes saldo pendiente al corte."
+            )
+        } else {
+            var totales: [String] = []
+            if resumen.cargosCorteVigente > 0 {
+                totales.append(
+                    "Cargos asignados en cortes vigentes: "
+                    + dinero(resumen.cargosCorteVigente)
+                )
+                let aplicado = max(
+                    0,
+                    resumen.cargosCorteVigente
+                        - resumen.pendienteCorteVigente
+                ).redondeadoAMoneda
+                if aplicado > 0 {
+                    totales.append(
+                        "Pagos aplicados a esos cargos: −"
+                        + dinero(aplicado)
+                    )
+                }
+            }
+            if resumen.saldoAnteriorPendiente > 0 {
+                totales.append(
+                    "Saldo anterior pendiente: "
+                    + dinero(resumen.saldoAnteriorPendiente)
+                )
+            }
+            if resumen.otrosPendientes > 0 {
+                totales.append(
+                    "Otros cargos pendientes: "
+                    + dinero(resumen.otrosPendientes)
+                )
+            }
+            totales.append(
+                "TOTAL A PAGAR AHORA: "
+                + dinero(resumen.totalAPagarAhora)
+            )
+            secciones.append(totales.joined(separator: "\n"))
+        }
+
+        if resumen.comprasSinCortar > 0 {
+            secciones.append(
+                "Compras todavía sin cortar: "
+                + dinero(resumen.comprasSinCortar)
+                + "\nSon informativas y no están incluidas en el total a pagar ahora."
+            )
+        }
+
+        secciones.append(
+            "Si algo no coincide, avísame para revisarlo antes del pago."
+        )
+        return secciones.joined(separator: "\n\n")
+    }
+
+    private static func cargo(
+        para parte: Participacion
+    ) -> CargoPersona? {
+        guard parte.monto > 0,
+              let movimiento = parte.compra?.movimiento,
+              movimiento.cuentaParaCalculos else { return nil }
+
+        let estado = estadoAsociado(
+            a: parte,
+            movimiento: movimiento
+        )
+        let clasificacion: ClasificacionCargoPersona
+        if let estado, let tarjeta = movimiento.tarjeta {
+            if let vigente = tarjeta.estadoDeCuentaVigente,
+               Calendar.current.isDate(
+                   vigente.fechaCorte,
+                   inSameDayAs: estado.fechaCorte
+               ) {
+                clasificacion = .corteVigente
+            } else {
+                clasificacion = .saldoAnterior
+            }
+        } else if movimiento.tarjeta != nil {
+            clasificacion = .sinCortar
+        } else {
+            clasificacion = .otroExigible
+        }
+
+        let detalleLimpio = movimiento.detalle.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let fechaReferencia = estado?.fechaCorte ?? movimiento.fecha
+        return CargoPersona(
+            clave: [
+                String(describing: movimiento.id),
+                estado.map {
+                    String($0.fechaCorte.timeIntervalSinceReferenceDate)
+                } ?? clasificacion.rawValue
+            ].joined(separator: "|"),
+            detalle: detalleLimpio.isEmpty
+                ? "Compra compartida"
+                : detalleLimpio,
+            fecha: fechaReferencia,
+            tarjeta: movimiento.tarjeta?.nombre,
+            fechaCorte: estado?.fechaCorte,
+            etiquetaMSI: etiquetaMSI(
+                movimiento.planMSI,
+                en: estado
+            ),
+            clasificacion: clasificacion,
+            monto: parte.monto.redondeadoAMoneda,
+            pendiente: parte.monto.redondeadoAMoneda
+        )
+    }
+
+    private static func estadoAsociado(
+        a parte: Participacion,
+        movimiento: Movimiento
+    ) -> EstadoDeCuenta? {
+        guard let tarjeta = movimiento.tarjeta else { return nil }
+
+        if let lote = parte.importacionID,
+           let exacto = tarjeta.estadosDeCuenta.first(
+               where: { $0.importacionID == lote }
+           ) {
+            return exacto
+        }
+        if let lote = movimiento.importacionID,
+           let exacto = tarjeta.estadosDeCuenta.first(
+               where: { $0.importacionID == lote }
+           ) {
+            return exacto
+        }
+
+        let calendario = Calendar.current
+        return tarjeta.estadosDeCuenta
+            .filter { estado in
+                let fin = calendario.date(
+                    byAdding: .day,
+                    value: 1,
+                    to: calendario.startOfDay(for: estado.finPeriodo)
+                ) ?? estado.finPeriodo
+                return movimiento.fecha >= estado.inicioPeriodo
+                    && movimiento.fecha < fin
+            }
+            .max { $0.fechaCorte < $1.fechaCorte }
+    }
+
+    private static func etiquetaMSI(
+        _ plan: PlanMSI?,
+        en estado: EstadoDeCuenta?
+    ) -> String? {
+        guard let plan else { return nil }
+        guard let estado,
+              let mensualidad = plan.mensualidades.first(where: {
+                  guard let corte = $0.estadoDeCuenta else { return false }
+                  return Calendar.current.isDate(
+                      corte.fechaCorte,
+                      inSameDayAs: estado.fechaCorte
+                  )
+              }) else {
+            return "MSI"
+        }
+        return "MSI \(mensualidad.numero)/\(plan.numeroMeses)"
+    }
+
+    private static func agrupar(
+        _ cargos: [CargoPersona]
+    ) -> [ConceptoPendientePersona] {
+        var resultado: [ConceptoPendientePersona] = []
+        var indices: [String: Int] = [:]
+
+        for cargo in cargos {
+            if let indice = indices[cargo.clave] {
+                resultado[indice].montoOriginal += cargo.monto
+                resultado[indice].montoPendiente += cargo.pendiente
+                resultado[indice].montoOriginal =
+                    resultado[indice].montoOriginal.redondeadoAMoneda
+                resultado[indice].montoPendiente =
+                    resultado[indice].montoPendiente.redondeadoAMoneda
+            } else {
+                indices[cargo.clave] = resultado.count
+                resultado.append(ConceptoPendientePersona(
+                    clave: cargo.clave,
+                    detalle: cargo.detalle,
+                    fecha: cargo.fecha,
+                    tarjeta: cargo.tarjeta,
+                    fechaCorte: cargo.fechaCorte,
+                    etiquetaMSI: cargo.etiquetaMSI,
+                    clasificacion: cargo.clasificacion,
+                    montoOriginal: cargo.monto,
+                    montoPendiente: cargo.pendiente
+                ))
+            }
+        }
+        return resultado.sorted {
+            if $0.fecha == $1.fecha { return $0.detalle < $1.detalle }
+            return $0.fecha < $1.fecha
+        }
+    }
+
+    private static func agregarSeccion(
+        titulo: String,
+        clasificacion: ClasificacionCargoPersona,
+        conceptos: [ConceptoPendientePersona],
+        en secciones: inout [String]
+    ) {
+        let pendientes = conceptos.filter {
+            $0.clasificacion == clasificacion && $0.montoPendiente > 0
+        }
+        guard !pendientes.isEmpty else { return }
+
+        let lineas = pendientes.enumerated().map { indice, concepto in
+            var datos: [String] = []
             if let tarjeta = concepto.tarjeta, !tarjeta.isEmpty {
                 datos.append(tarjeta)
             }
-            if concepto.esMSI {
-                let descripcion = concepto.cantidadPartes == 1
-                    ? "1 mensualidad MSI registrada"
-                    : "\(concepto.cantidadPartes) mensualidades MSI registradas"
-                datos.append(descripcion)
+            if let corte = concepto.fechaCorte {
+                datos.append("corte " + fecha(corte))
+            } else {
+                datos.append(fecha(concepto.fecha))
             }
-            return "\(indice + 1). \(concepto.detalle)\n   \(datos.joined(separator: " · ")) — \(dinero(concepto.monto))"
+            if let etiqueta = concepto.etiquetaMSI {
+                datos.append(etiqueta)
+            }
+            let importe: String
+            if concepto.montoPendiente < concepto.montoOriginal {
+                importe = dinero(concepto.montoPendiente)
+                    + " pendiente de "
+                    + dinero(concepto.montoOriginal)
+            } else {
+                importe = dinero(concepto.montoPendiente)
+            }
+            return "\(indice + 1). \(concepto.detalle)\n   \(datos.joined(separator: " · ")) — \(importe)"
         }
         .joined(separator: "\n")
-
-        let compras = persona.totalQueTeDebe
-        let pagos = persona.totalAplicadoADeuda
-        let pendiente = max(0, persona.saldoPendiente)
-        let estado = pendiente > 0
-            ? "Total pendiente: \(dinero(pendiente))"
-            : "Estado: cubierto. No tienes saldo pendiente."
-
-        return """
-        \(introduccion)
-
-        \(lineas)
-
-        Subtotal de tus partes: \(dinero(compras))
-        Pagos ya registrados: −\(dinero(pagos))
-        \(estado)
-
-        Si algo no coincide, avísame para revisarlo antes del pago.
-        """
-    }
-
-    private struct ConceptoCobro {
-        let detalle: String
-        let fecha: Date
-        let tarjeta: String?
-        let esMSI: Bool
-        let cantidadPartes: Int
-        let monto: Double
+        secciones.append("\(titulo)\n\(lineas)")
     }
 
     private static func dinero(_ monto: Double) -> String {
