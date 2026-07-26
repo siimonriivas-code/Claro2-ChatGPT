@@ -3,7 +3,7 @@ import SwiftData
 
 enum MigradorDatosClaro {
     private static let clave = "versionModeloDatosClaro"
-    static let versionActual = 6
+    static let versionActual = 7
 
     /// Las etapas son idempotentes: interrumpir la app no deja una migración
     /// a medias y volver a abrirla es seguro.
@@ -63,6 +63,159 @@ enum MigradorDatosClaro {
                 return
             }
         }
+        if version < 7 {
+            do {
+                try prepararInicioOficialJulio2026(contexto: contexto)
+                try contexto.save()
+                version = 7
+                UserDefaults.standard.set(version, forKey: clave)
+            } catch {
+                return
+            }
+        }
+    }
+
+    /// Cierra una sola vez el periodo de pruebas confirmado por el usuario.
+    ///
+    /// La reparación exige la huella completa del conjunto oficial de julio
+    /// y los dos pagos reales. Así no modifica instalaciones nuevas ni datos
+    /// de otra persona que casualmente tenga una cuenta con nombre parecido.
+    ///
+    /// La cuenta parte de la fotografía real de $4,314.35 tomada justo antes
+    /// de pagar Liverpool y Rappi. Los movimientos históricos se conservan
+    /// como bitácora, pero dejan de alterar el disponible desde esa foto.
+    @MainActor private static func prepararInicioOficialJulio2026(
+        contexto: ModelContext
+    ) throws {
+        let calendario = Calendar(identifier: .gregorian)
+        let tarjetas = try contexto.fetch(FetchDescriptor<TarjetaCredito>())
+        let cuentas = try contexto.fetch(FetchDescriptor<CuentaBancaria>())
+        let movimientos = try contexto.fetch(FetchDescriptor<Movimiento>())
+
+        let cortesOficiales: [(tarjeta: String, anio: Int, mes: Int, dia: Int)] = [
+            ("RAPPY", 2026, 7, 6),
+            ("HOME DEPOT", 2026, 7, 10),
+            ("LIVERPOOL", 2026, 7, 13),
+            ("HEY BANCO INC", 2026, 7, 13),
+            ("ORO SIMON", 2026, 7, 17),
+            ("BBVA IZCOALT", 2026, 7, 17),
+            ("BBVA AZUL", 2026, 7, 20)
+        ]
+
+        let tieneConjuntoOficial = cortesOficiales.allSatisfy { esperado in
+            tarjetas.contains { tarjeta in
+                normalizar(tarjeta.nombre) == esperado.tarjeta
+                    && tarjeta.estadosDeCuenta.contains { estado in
+                        componentesDeFecha(
+                            estado.fechaCorte,
+                            calendario: calendario
+                        ) == (esperado.anio, esperado.mes, esperado.dia)
+                    }
+            }
+        }
+        guard tieneConjuntoOficial else { return }
+
+        guard let cuenta = cuentas.first(where: {
+            !$0.archivada
+                && normalizar($0.nombre).contains("DEBITO")
+                && normalizar($0.nombre).contains("BBVA")
+        }) else { return }
+
+        let pagosRealesEsperados: [(tarjeta: String, monto: Double)] = [
+            ("RAPPY", 476.89),
+            ("LIVERPOOL", 299.00)
+        ]
+        let pagosReales = pagosRealesEsperados.compactMap { esperado in
+            movimientos
+                .filter {
+                    $0.cuentaParaCalculos
+                        && $0.tipo == .pagoTarjeta
+                        && $0.cuenta === cuenta
+                        && normalizar($0.tarjeta?.nombre ?? "")
+                            == esperado.tarjeta
+                        && abs($0.monto - esperado.monto) < 0.01
+                }
+                .max { $0.creadoEl < $1.creadoEl }
+        }
+        guard pagosReales.count == pagosRealesEsperados.count,
+              let primerPago = pagosReales.map(\.fecha).min()
+        else { return }
+
+        // Los tres pagos fueron capturas de prueba y el usuario confirmó que
+        // no ocurrieron. Cancelar conserva la trazabilidad sin descontarlos.
+        let pagosDePrueba: [(tarjeta: String, monto: Double,
+                             corte: (Int, Int, Int))] = [
+            ("BBVA AZUL", 9_977.51, (2026, 6, 20)),
+            ("BBVA IZCOALT", 11_297.44, (2026, 6, 19)),
+            ("ORO SIMON", 20_551.46, (2026, 6, 18))
+        ]
+        for pago in movimientos where pago.cuentaParaCalculos
+            && pago.tipo == .pagoTarjeta && pago.cuenta === cuenta {
+            let nombre = normalizar(pago.tarjeta?.nombre ?? "")
+            guard pagosDePrueba.contains(where: { esperado in
+                nombre == esperado.tarjeta
+                    && abs(pago.monto - esperado.monto) < 0.01
+                    && pago.fechaCorteObjetivoPago.map {
+                        componentesDeFecha($0, calendario: calendario)
+                            == esperado.corte
+                    } == true
+            }) else { continue }
+
+            pago.estado = .cancelado
+            pago.editadoEl = .now
+            pago.detalle = pago.detalle.isEmpty
+                ? "Cancelado al cerrar el periodo de pruebas"
+                : "\(pago.detalle) · cancelado al cerrar pruebas"
+        }
+
+        // Solo retiramos las fichas de los tres cortes simulados. No borramos
+        // sus compras o asignaciones: sirven como memoria para reconocer MSI
+        // y personas en los estados oficiales posteriores.
+        let cortesDePrueba: [(tarjeta: String, fecha: (Int, Int, Int))] = [
+            ("ORO SIMON", (2026, 6, 18)),
+            ("BBVA IZCOALT", (2026, 6, 19)),
+            ("BBVA AZUL", (2026, 6, 20))
+        ]
+        for tarjeta in tarjetas {
+            let nombre = normalizar(tarjeta.nombre)
+            for estado in tarjeta.estadosDeCuenta where cortesDePrueba.contains(
+                where: {
+                    nombre == $0.tarjeta
+                        && componentesDeFecha(
+                            estado.fechaCorte,
+                            calendario: calendario
+                        ) == $0.fecha
+                }
+            ) {
+                contexto.delete(estado)
+            }
+        }
+
+        cuenta.saldoInicial = 4_314.35
+        cuenta.fechaSaldoInicial = primerPago.addingTimeInterval(-1)
+    }
+
+    private static func normalizar(_ texto: String) -> String {
+        texto
+            .folding(options: [.diacriticInsensitive, .caseInsensitive],
+                     locale: Locale(identifier: "es_MX"))
+            .uppercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func componentesDeFecha(
+        _ fecha: Date,
+        calendario: Calendar
+    ) -> (Int, Int, Int) {
+        let componentes = calendario.dateComponents(
+            [.year, .month, .day],
+            from: fecha
+        )
+        return (
+            componentes.year ?? 0,
+            componentes.month ?? 0,
+            componentes.day ?? 0
+        )
     }
 
     /// Versiones anteriores restaban el depósito completo a la persona. Si

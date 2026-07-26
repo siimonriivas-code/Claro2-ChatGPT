@@ -32,6 +32,43 @@ final class PaymentSynchronizationRegressionTests: XCTestCase {
         )
     }
 
+    func testSaldoOficialRestaLiverpoolYRappiUnaSolaVez() {
+        let fechaBase = fecha(2026, 7, 25)
+        let cuenta = CuentaBancaria(
+            nombre: "Débito BBVA",
+            tipo: .debito,
+            saldoInicial: 4_314.35,
+            fechaSaldoInicial: fechaBase
+        )
+        let rappi = Movimiento(
+            tipo: .pagoTarjeta,
+            monto: 476.89,
+            fecha: fechaBase.addingTimeInterval(60),
+            cuenta: cuenta
+        )
+        let liverpool = Movimiento(
+            tipo: .pagoTarjeta,
+            monto: 299,
+            fecha: fechaBase.addingTimeInterval(120),
+            cuenta: cuenta
+        )
+        cuenta.movimientos = [rappi, liverpool]
+
+        XCTAssertEqual(
+            cuenta.saldoCalculado(hasta: fechaBase),
+            3_538.46,
+            accuracy: 0.001
+        )
+
+        rappi.estado = .cancelado
+        liverpool.estado = .cancelado
+        XCTAssertEqual(
+            cuenta.saldoCalculado(hasta: fechaBase),
+            4_314.35,
+            accuracy: 0.001
+        )
+    }
+
     func testReconoceCorteActualSinConfundirUnoHistorico() {
         let hoy = fecha(2026, 7, 25)
         XCTAssertTrue(
