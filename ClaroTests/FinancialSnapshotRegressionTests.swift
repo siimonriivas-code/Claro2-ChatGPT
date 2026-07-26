@@ -87,6 +87,39 @@ final class FinancialSnapshotRegressionTests: XCTestCase {
                        8_700, accuracy: 0.001)
     }
 
+    func testHistorialPredictivoRespetaLaFotoInicialDeLaCuenta() {
+        let calendario = Calendar.current
+        let base = calendario.startOfDay(for: .now)
+        let fechaFoto = calendario.date(
+            byAdding: .day, value: -10, to: base
+        )!
+        let cuenta = CuentaBancaria(
+            nombre: "Cuenta con foto", tipo: .debito,
+            saldoInicial: 1_000, fechaSaldoInicial: fechaFoto
+        )
+        let ingresoYaIncluido = Movimiento(
+            tipo: .ingreso, monto: 500,
+            fecha: calendario.date(
+                byAdding: .day, value: -20, to: base
+            )!,
+            detalle: "Ya incluido en la foto", cuenta: cuenta
+        )
+        let ingresoPosterior = Movimiento(
+            tipo: .ingreso, monto: 200,
+            fecha: calendario.date(
+                byAdding: .day, value: -5, to: base
+            )!,
+            detalle: "Posterior a la foto", cuenta: cuenta
+        )
+        cuenta.movimientos = [ingresoYaIncluido, ingresoPosterior]
+
+        let ultimo = MotorPredictivo.historialPatrimonio(
+            cuentas: [cuenta], tarjetas: [], personas: [], deudas: [],
+            meses: 1
+        ).last
+        XCTAssertEqual(ultimo?.valor ?? -1, 1_200, accuracy: 0.001)
+    }
+
     func testPagoTardioCompletoLiquidaCorteSinCrearDeudaFantasma() {
         let ahora = fecha(2026, 8, 10)
         let tarjeta = TarjetaCredito(

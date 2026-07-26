@@ -27,6 +27,7 @@ struct MovimientoDetalleView: View {
     @State private var confirmandoCancelacion = false
     @State private var mostrandoDivision = false
     @State private var partesEdicion: [PersistentIdentifier: Double] = [:]
+    @State private var mensajeError: String?
 
     init(movimiento: Movimiento) {
         self.movimiento = movimiento
@@ -180,6 +181,14 @@ struct MovimientoDetalleView: View {
             } message: {
                 Text("Dejará de contar en todos los cálculos, pero quedará visible en el historial.")
             }
+            .alert("No se pudo guardar el cambio", isPresented: Binding(
+                get: { mensajeError != nil },
+                set: { if !$0 { mensajeError = nil } }
+            )) {
+                Button("Entendido", role: .cancel) { }
+            } message: {
+                Text(mensajeError ?? "Tus datos anteriores se conservaron.")
+            }
         }
         .aparienciaDeLaApp()
     }
@@ -229,31 +238,41 @@ struct MovimientoDetalleView: View {
     private func aplicarDivision() {
         let conMonto = partesEdicion.filter { $0.value > 0 }
 
-        // 100% mía: retirar la división si existía
-        if conMonto.isEmpty {
-            if let compartida = movimiento.compraCompartida {
-                for parte in compartida.participaciones { contexto.delete(parte) }
-                movimiento.compraCompartida = nil
-                contexto.delete(compartida)
-            }
-            return
-        }
+        ejecutarCambioCritico(
+            motivo: "Antes de cambiar la división de una compra",
+            cerrarAlGuardar: false
+        ) {
+            // 100% mía: retirar la división si existía.
+            if conMonto.isEmpty {
+                if let compartida = movimiento.compraCompartida {
+                    for parte in compartida.participaciones {
+                        contexto.delete(parte)
+                    }
+                    movimiento.compraCompartida = nil
+                    contexto.delete(compartida)
+                }
+            } else {
+                let compartida: CompraCompartida
+                if let existente = movimiento.compraCompartida {
+                    compartida = existente
+                    for parte in compartida.participaciones {
+                        contexto.delete(parte)
+                    }
+                } else {
+                    compartida = CompraCompartida()
+                    contexto.insert(compartida)
+                    movimiento.compraCompartida = compartida
+                }
 
-        let compartida: CompraCompartida
-        if let existente = movimiento.compraCompartida {
-            compartida = existente
-            for parte in compartida.participaciones { contexto.delete(parte) }
-        } else {
-            compartida = CompraCompartida()
-            contexto.insert(compartida)
-            movimiento.compraCompartida = compartida
-        }
-
-        for persona in personas {
-            if let monto = conMonto[persona.id], monto > 0 {
-                contexto.insert(Participacion(monto: monto,
-                                              persona: persona,
-                                              compra: compartida))
+                for persona in personas {
+                    if let monto = conMonto[persona.id], monto > 0 {
+                        contexto.insert(Participacion(
+                            monto: monto,
+                            persona: persona,
+                            compra: compartida
+                        ))
+                    }
+                }
             }
         }
     }
@@ -269,45 +288,87 @@ struct MovimientoDetalleView: View {
     }
 
     private func guardarCambios() {
-        if let nuevoMonto = montoEditado, nuevoMonto != movimiento.monto {
-            registrar(campo: "Monto",
-                      anterior: movimiento.monto.comoDinero,
-                      nuevo: nuevoMonto.comoDinero)
-            movimiento.monto = nuevoMonto.redondeadoAMoneda
+        ejecutarCambioCritico(
+            motivo: "Antes de editar un movimiento"
+        ) {
+            if let nuevoMonto = montoEditado,
+               nuevoMonto != movimiento.monto {
+                registrar(campo: "Monto",
+                          anterior: movimiento.monto.comoDinero,
+                          nuevo: nuevoMonto.comoDinero)
+                movimiento.monto = nuevoMonto.redondeadoAMoneda
+            }
+            if fechaEditada != movimiento.fecha {
+                registrar(
+                    campo: "Fecha",
+                    anterior: movimiento.fecha.formatted(
+                        date: .abbreviated, time: .omitted
+                    ),
+                    nuevo: fechaEditada.formatted(
+                        date: .abbreviated, time: .omitted
+                    )
+                )
+                movimiento.fecha = fechaEditada
+            }
+            if categoriaEditada?.persistentModelID
+                != movimiento.categoria?.persistentModelID {
+                registrar(campo: "Categoría",
+                          anterior: movimiento.categoria?.nombre
+                            ?? "Sin categoría",
+                          nuevo: categoriaEditada?.nombre
+                            ?? "Sin categoría")
+                movimiento.categoria = categoriaEditada
+            }
+            if detalleEditado != movimiento.detalle {
+                registrar(campo: "Descripción",
+                          anterior: movimiento.detalle.isEmpty
+                            ? "—" : movimiento.detalle,
+                          nuevo: detalleEditado.isEmpty
+                            ? "—" : detalleEditado)
+                movimiento.detalle = detalleEditado
+            }
+            movimiento.editadoEl = .now
         }
-        if fechaEditada != movimiento.fecha {
-            registrar(campo: "Fecha",
-                      anterior: movimiento.fecha.formatted(date: .abbreviated, time: .omitted),
-                      nuevo: fechaEditada.formatted(date: .abbreviated, time: .omitted))
-            movimiento.fecha = fechaEditada
-        }
-        if categoriaEditada != movimiento.categoria {
-            registrar(campo: "Categoría",
-                      anterior: movimiento.categoria?.nombre ?? "Sin categoría",
-                      nuevo: categoriaEditada?.nombre ?? "Sin categoría")
-            movimiento.categoria = categoriaEditada
-        }
-        if detalleEditado != movimiento.detalle {
-            registrar(campo: "Descripción",
-                      anterior: movimiento.detalle.isEmpty ? "—" : movimiento.detalle,
-                      nuevo: detalleEditado.isEmpty ? "—" : detalleEditado)
-            movimiento.detalle = detalleEditado
-        }
-        movimiento.editadoEl = .now
-        cerrar()
     }
 
     private func cancelar() {
-        registrar(campo: "Estado", anterior: "Activo", nuevo: "Cancelado")
-        movimiento.estado = .cancelado
-        movimiento.editadoEl = .now
-        cerrar()
+        ejecutarCambioCritico(
+            motivo: "Antes de cancelar un movimiento"
+        ) {
+            registrar(campo: "Estado", anterior: "Activo",
+                      nuevo: "Cancelado")
+            movimiento.estado = .cancelado
+            movimiento.editadoEl = .now
+        }
     }
 
     private func reactivar() {
-        registrar(campo: "Estado", anterior: "Cancelado", nuevo: "Activo")
-        movimiento.estado = .activo
-        movimiento.editadoEl = .now
-        cerrar()
+        ejecutarCambioCritico(
+            motivo: "Antes de reactivar un movimiento"
+        ) {
+            registrar(campo: "Estado", anterior: "Cancelado",
+                      nuevo: "Activo")
+            movimiento.estado = .activo
+            movimiento.editadoEl = .now
+        }
+    }
+
+    private func ejecutarCambioCritico(
+        motivo: String,
+        cerrarAlGuardar: Bool = true,
+        cambio: () -> Void
+    ) {
+        do {
+            try CoordinadorOperacionesClaro.prepararCambioCritico(
+                contexto: contexto,
+                motivo: motivo
+            )
+            cambio()
+            try CoordinadorOperacionesClaro.guardar(contexto: contexto)
+            if cerrarAlGuardar { cerrar() }
+        } catch {
+            contexto.rollback()
+            mensajeError = "El cambio no se aplicó. Claro conservó la versión anterior del movimiento."
+        }
     }
 }

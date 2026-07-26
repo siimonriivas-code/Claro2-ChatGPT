@@ -123,7 +123,7 @@ enum ProgramadorDeNotificaciones {
         }
 
         programarCobrosPendientes(personas: personas, centro: centro)
-        UserDefaults.standard.set(nuevos,
+        UserDefaults.standard.set(Array(Set(nuevos)).sorted(),
                                   forKey: claveIdentificadoresAutomaticos)
     }
 

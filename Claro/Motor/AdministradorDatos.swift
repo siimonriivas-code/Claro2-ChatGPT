@@ -9,6 +9,7 @@ import SwiftData
 enum AdministradorDatos {
     static func borrarTodo(contexto: ModelContext,
                            restaurarCategorias: Bool) throws {
+        try contexto.delete(model: LiquidacionGastoIndependiente.self)
         try contexto.delete(model: ParteGastoIndependiente.self)
         try contexto.delete(model: GastoCompartidoIndependiente.self)
         try contexto.delete(model: GrupoGastosCompartidos.self)

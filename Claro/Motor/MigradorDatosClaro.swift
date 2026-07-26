@@ -3,7 +3,7 @@ import SwiftData
 
 enum MigradorDatosClaro {
     private static let clave = "versionModeloDatosClaro"
-    static let versionActual = 8
+    static let versionActual = 9
 
     /// Las etapas son idempotentes: interrumpir la app no deja una migración
     /// a medias y volver a abrirla es seguro.
@@ -94,6 +94,81 @@ enum MigradorDatosClaro {
                 return
             }
         }
+        if version < 9 {
+            do {
+                let tarjetas = try contexto.fetch(
+                    FetchDescriptor<TarjetaCredito>()
+                )
+                let personas = try contexto.fetch(
+                    FetchDescriptor<Persona>()
+                )
+                repararIdentificadoresNotificaciones(
+                    tarjetas: tarjetas,
+                    personas: personas
+                )
+                try contexto.save()
+                version = 9
+                UserDefaults.standard.set(version, forKey: clave)
+            } catch {
+                return
+            }
+        }
+    }
+
+    /// Las migraciones ligeras pueden asignar el mismo valor predeterminado
+    /// a varias filas antiguas. Cada tarjeta y persona necesita una clave
+    /// distinta para que un aviso o enlace de Claro Familia nunca abra el
+    /// registro equivocado. También se reutiliza al restaurar respaldos.
+    @discardableResult
+    static func repararIdentificadoresNotificaciones(
+        tarjetas: [TarjetaCredito],
+        personas: [Persona]
+    ) -> Int {
+        var usados = Set<String>()
+        var reparados = 0
+
+        func identificadorValido(_ valor: String) -> String? {
+            let limpio = valor.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            guard !limpio.isEmpty, usados.insert(limpio).inserted else {
+                return nil
+            }
+            return limpio
+        }
+
+        for tarjeta in tarjetas {
+            if let valido = identificadorValido(
+                tarjeta.identificadorNotificaciones
+            ) {
+                if valido != tarjeta.identificadorNotificaciones {
+                    tarjeta.identificadorNotificaciones = valido
+                    reparados += 1
+                }
+            } else {
+                let nuevo = UUID().uuidString
+                usados.insert(nuevo)
+                tarjeta.identificadorNotificaciones = nuevo
+                reparados += 1
+            }
+        }
+
+        for persona in personas {
+            if let valido = identificadorValido(
+                persona.identificadorNotificaciones
+            ) {
+                if valido != persona.identificadorNotificaciones {
+                    persona.identificadorNotificaciones = valido
+                    reparados += 1
+                }
+            } else {
+                let nuevo = UUID().uuidString
+                usados.insert(nuevo)
+                persona.identificadorNotificaciones = nuevo
+                reparados += 1
+            }
+        }
+        return reparados
     }
 
     /// Cierra una sola vez el periodo de pruebas confirmado por el usuario.

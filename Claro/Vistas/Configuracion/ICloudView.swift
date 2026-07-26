@@ -192,6 +192,7 @@ struct ICloudView: View {
             CoordinadorOperacionesClaro.actualizarServicios(contexto: contexto)
             mensaje = "Respaldo restaurado correctamente."
         } catch {
+            contexto.rollback()
             mensaje = "No se pudo restaurar: \(error.localizedDescription)"
         }
         self.respaldoDescargado = nil

@@ -28,17 +28,22 @@ struct CuentaDetalleView: View {
         let inicioHoy = Calendar.current.startOfDay(for: FechaAnalisisClaro.actual)
         let inicioManana = Calendar.current.date(
             byAdding: .day, value: 1, to: inicioHoy) ?? FechaAnalisisClaro.actual
-        let todos = (cuenta.movimientos + cuenta.movimientosEntrantes)
-            .sorted { $0.fecha > $1.fecha }
+        var unicos: [PersistentIdentifier: Movimiento] = [:]
+        for movimiento in cuenta.movimientos + cuenta.movimientosEntrantes {
+            unicos[movimiento.persistentModelID] = movimiento
+        }
+        let todos = unicos.values.sorted { $0.fecha > $1.fecha }
         let filtrados = todos.filter { movimiento in
             switch filtro {
             case .todos:
                 return movimiento.fecha < inicioManana
             case .entradas:
-                return movimiento.cuentaDestino === cuenta
+                return movimiento.cuentaDestino?.persistentModelID
+                        == cuenta.persistentModelID
                     || [.ingreso, .cobroRecibido, .bonificacion].contains(movimiento.tipo)
             case .salidas:
-                return movimiento.cuenta === cuenta
+                return movimiento.cuenta?.persistentModelID
+                        == cuenta.persistentModelID
                     && [.gasto, .pagoTarjeta, .transferencia, .abonoDeuda].contains(movimiento.tipo)
             case .programados:
                 return movimiento.fecha >= inicioManana

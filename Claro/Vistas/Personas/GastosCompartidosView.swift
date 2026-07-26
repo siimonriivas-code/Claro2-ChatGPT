@@ -313,7 +313,10 @@ private struct NuevaLiquidacionGastoView: View {
         if !pagadorEsUsuario && pagador == nil { return false }
         if !receptorEsUsuario && receptor == nil { return false }
         if pagadorEsUsuario && receptorEsUsuario { return false }
-        if !pagadorEsUsuario && !receptorEsUsuario && pagador === receptor { return false }
+        if !pagadorEsUsuario && !receptorEsUsuario,
+           pagador?.persistentModelID == receptor?.persistentModelID {
+            return false
+        }
         return true
     }
 

@@ -69,6 +69,73 @@ final class PaymentSynchronizationRegressionTests: XCTestCase {
         )
     }
 
+    func testFotoDeDeudaNoVuelveASumarComprasHistoricas() {
+        let tarjeta = TarjetaCredito(
+            nombre: "Tarjeta con foto",
+            limiteCredito: 20_000,
+            diaCorte: 15,
+            diaLimitePago: 5,
+            saldoInicial: 1_000,
+            fechaSaldoInicial: fecha(2026, 7, 1)
+        )
+        let compraYaIncluida = Movimiento(
+            tipo: .compraCredito,
+            monto: 700,
+            fecha: fecha(2026, 6, 20),
+            detalle: "Ya incluida en la foto",
+            tarjeta: tarjeta
+        )
+        let compraPosterior = Movimiento(
+            tipo: .compraCredito,
+            monto: 200,
+            fecha: fecha(2026, 7, 10),
+            detalle: "Posterior a la foto",
+            tarjeta: tarjeta
+        )
+        tarjeta.movimientos = [compraYaIncluida, compraPosterior]
+
+        XCTAssertEqual(
+            tarjeta.deudaCalculada(hasta: fecha(2026, 7, 15)),
+            1_200,
+            accuracy: 0.001
+        )
+    }
+
+    func testIdentificadoresDeAvisosQuedanUnicosTrasMigracion() {
+        let tarjetaA = TarjetaCredito(
+            nombre: "A", limiteCredito: 10_000,
+            diaCorte: 1, diaLimitePago: 20
+        )
+        let tarjetaB = TarjetaCredito(
+            nombre: "B", limiteCredito: 10_000,
+            diaCorte: 2, diaLimitePago: 21
+        )
+        let personaA = Persona(nombre: "A")
+        let personaB = Persona(nombre: "B")
+        tarjetaA.identificadorNotificaciones = "repetido"
+        tarjetaB.identificadorNotificaciones = "repetido"
+        personaA.identificadorNotificaciones = "repetido"
+        personaB.identificadorNotificaciones = "   "
+
+        let reparados = MigradorDatosClaro
+            .repararIdentificadoresNotificaciones(
+                tarjetas: [tarjetaA, tarjetaB],
+                personas: [personaA, personaB]
+            )
+        let identificadores = [
+            tarjetaA.identificadorNotificaciones,
+            tarjetaB.identificadorNotificaciones,
+            personaA.identificadorNotificaciones,
+            personaB.identificadorNotificaciones
+        ]
+
+        XCTAssertEqual(reparados, 3)
+        XCTAssertEqual(Set(identificadores).count, identificadores.count)
+        XCTAssertTrue(identificadores.allSatisfy {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        })
+    }
+
     func testReconoceCorteActualSinConfundirUnoHistorico() {
         let hoy = fecha(2026, 7, 25)
         XCTAssertTrue(

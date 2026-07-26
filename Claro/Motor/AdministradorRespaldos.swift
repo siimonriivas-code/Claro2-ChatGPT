@@ -560,6 +560,13 @@ enum AdministradorRespaldos {
             }
         }
 
+        // Un respaldo antiguo puede contener claves repetidas creadas por
+        // una migración ligera. Normalizamos antes de guardar para que las
+        // notificaciones y los enlaces familiares sigan siendo inequívocos.
+        MigradorDatosClaro.repararIdentificadoresNotificaciones(
+            tarjetas: Array(tarjetas.values),
+            personas: Array(personas.values)
+        )
         try contexto.save()
         aplicar(respaldo.preferencias)
         if respaldo.preferencias.notificacionesActivadas {

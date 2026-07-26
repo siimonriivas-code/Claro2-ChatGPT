@@ -104,7 +104,8 @@ enum MotorPredictivo {
     private static func saldo(_ cuenta: CuentaBancaria, hasta fecha: Date) -> Double {
         guard cuenta.fechaSaldoInicial <= fecha else { return 0 }
         var saldo = cuenta.saldoInicial
-        for m in cuenta.movimientos where m.cuentaParaCalculos && m.fecha <= fecha {
+        for m in cuenta.movimientos where m.cuentaParaCalculos
+            && m.fecha >= cuenta.fechaSaldoInicial && m.fecha <= fecha {
             switch m.tipo {
             case .ingreso, .cobroRecibido, .bonificacion: saldo += m.monto
             case .gasto, .pagoTarjeta, .transferencia, .abonoDeuda: saldo -= m.monto
@@ -113,7 +114,8 @@ enum MotorPredictivo {
             }
         }
         for m in cuenta.movimientosEntrantes
-            where m.cuentaParaCalculos && m.tipo == .transferencia && m.fecha <= fecha {
+            where m.cuentaParaCalculos && m.tipo == .transferencia
+                && m.fecha >= cuenta.fechaSaldoInicial && m.fecha <= fecha {
             saldo += m.monto
         }
         return saldo
@@ -122,7 +124,8 @@ enum MotorPredictivo {
     private static func deuda(_ tarjeta: TarjetaCredito, hasta fecha: Date) -> Double {
         guard tarjeta.fechaSaldoInicial <= fecha else { return 0 }
         var deuda = tarjeta.saldoInicial
-        for m in tarjeta.movimientos where m.cuentaParaCalculos && m.fecha <= fecha {
+        for m in tarjeta.movimientos where m.cuentaParaCalculos
+            && m.fecha >= tarjeta.fechaSaldoInicial && m.fecha <= fecha {
             switch m.tipo {
             case .compraCredito: deuda += m.monto
             case .pagoTarjeta, .bonificacion: deuda -= m.monto

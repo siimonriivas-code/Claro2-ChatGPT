@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import SwiftData
 
 // MARK: - Conciliación entre cortes
 
@@ -64,7 +65,8 @@ extension TarjetaCredito {
         guard limite >= fechaSaldoInicial || saldoInicial == 0 else { return 0 }
 
         var deuda = limite >= fechaSaldoInicial ? saldoInicial : 0
-        for m in movimientos where m.cuentaParaCalculos && m.fecha <= limite {
+        for m in movimientos where m.cuentaParaCalculos
+            && m.fecha >= fechaSaldoInicial && m.fecha <= limite {
             switch m.tipo {
             case .compraCredito:              deuda += m.monto
             case .pagoTarjeta, .bonificacion: deuda -= m.monto
@@ -231,7 +233,10 @@ extension EstadoDeCuenta {
             byAdding: .day, value: 1,
             to: calendario.startOfDay(for: fechaReferencia)) ?? fechaReferencia
         let siguienteCorte = tarjeta.estadosDeCuenta
-            .filter { $0 !== self && $0.fechaCorte > fechaCorte }
+            .filter {
+                $0.persistentModelID != persistentModelID
+                    && $0.fechaCorte > fechaCorte
+            }
             .map(\.fechaCorte)
             .min()
         let finExclusivo = min(siguienteCorte ?? .distantFuture, finReferencia)
