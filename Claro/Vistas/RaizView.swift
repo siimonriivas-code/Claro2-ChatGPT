@@ -26,6 +26,8 @@ struct RaizView: View {
     @Query(filter: #Predicate<Persona> { !$0.archivada }) private var personas: [Persona]
     @Query private var bancos: [Banco]
     @Query(filter: #Predicate<CuentaBancaria> { !$0.archivada }) private var cuentas: [CuentaBancaria]
+    @Query private var estadosDeCuenta: [EstadoDeCuenta]
+    @Query private var movimientos: [Movimiento]
 
     @AppStorage("montosOcultos") private var montosOcultos = false
 
@@ -34,6 +36,18 @@ struct RaizView: View {
     @State private var mostrandoRegistro = false
     @ObservedObject private var enrutador = EnrutadorDeNotificaciones.compartido
     @AppStorage("onboardingCompletado") private var onboardingCompletado = false
+
+    /// CloudKit puede entregar primero las cuentas y después sus cortes o
+    /// movimientos. Esta huella vuelve a intentar migraciones pendientes
+    /// cuando cualquiera de esas piezas termina de llegar.
+    private var huellaDatosFinancieros: String {
+        [
+            tarjetas.count,
+            cuentas.count,
+            estadosDeCuenta.count,
+            movimientos.count
+        ].map(String.init).joined(separator: "-")
+    }
 
     var body: some View {
         ZStack {
@@ -113,8 +127,10 @@ struct RaizView: View {
             }
         }
         .aparienciaDeLaApp()
-        .task {
+        .task(id: huellaDatosFinancieros) {
             MigradorDatosClaro.ejecutarSiHaceFalta(contexto: contexto)
+        }
+        .task {
             Sembrador.sembrarSiHaceFalta(contexto: contexto)
             FechaAnalisisClaro.alinearUnaVezConPeriodoActual(
                 tarjetas: tarjetas

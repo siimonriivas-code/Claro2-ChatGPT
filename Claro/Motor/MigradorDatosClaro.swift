@@ -3,7 +3,7 @@ import SwiftData
 
 enum MigradorDatosClaro {
     private static let clave = "versionModeloDatosClaro"
-    static let versionActual = 7
+    static let versionActual = 8
 
     /// Las etapas son idempotentes: interrumpir la app no deja una migración
     /// a medias y volver a abrirla es seguro.
@@ -64,10 +64,19 @@ enum MigradorDatosClaro {
             }
         }
         if version < 7 {
+            // La primera versión de esta conciliación podía ejecutarse antes
+            // de que CloudKit hidratara el almacén. Avanzamos a la etapa
+            // reintentable, que solo se marca al completar el ajuste.
+            version = 7
+            UserDefaults.standard.set(version, forKey: clave)
+        }
+        if version < 8 {
             do {
-                try prepararInicioOficialJulio2026(contexto: contexto)
+                guard try prepararInicioOficialJulio2026(
+                    contexto: contexto
+                ) else { return }
                 try contexto.save()
-                version = 7
+                version = 8
                 UserDefaults.standard.set(version, forKey: clave)
             } catch {
                 return
@@ -86,7 +95,7 @@ enum MigradorDatosClaro {
     /// como bitácora, pero dejan de alterar el disponible desde esa foto.
     @MainActor private static func prepararInicioOficialJulio2026(
         contexto: ModelContext
-    ) throws {
+    ) throws -> Bool {
         let calendario = Calendar(identifier: .gregorian)
         let tarjetas = try contexto.fetch(FetchDescriptor<TarjetaCredito>())
         let cuentas = try contexto.fetch(FetchDescriptor<CuentaBancaria>())
@@ -113,13 +122,13 @@ enum MigradorDatosClaro {
                     }
             }
         }
-        guard tieneConjuntoOficial else { return }
+        guard tieneConjuntoOficial else { return false }
 
         guard let cuenta = cuentas.first(where: {
             !$0.archivada
                 && normalizar($0.nombre).contains("DEBITO")
                 && normalizar($0.nombre).contains("BBVA")
-        }) else { return }
+        }) else { return false }
 
         let pagosRealesEsperados: [(tarjeta: String, monto: Double)] = [
             ("RAPPY", 476.89),
@@ -139,7 +148,7 @@ enum MigradorDatosClaro {
         }
         guard pagosReales.count == pagosRealesEsperados.count,
               let primerPago = pagosReales.map(\.fecha).min()
-        else { return }
+        else { return false }
 
         // Los tres pagos fueron capturas de prueba y el usuario confirmó que
         // no ocurrieron. Cancelar conserva la trazabilidad sin descontarlos.
@@ -193,6 +202,7 @@ enum MigradorDatosClaro {
 
         cuenta.saldoInicial = 4_314.35
         cuenta.fechaSaldoInicial = primerPago.addingTimeInterval(-1)
+        return true
     }
 
     private static func normalizar(_ texto: String) -> String {
