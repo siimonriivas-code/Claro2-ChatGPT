@@ -72,13 +72,25 @@ enum MigradorDatosClaro {
         }
         if version < 8 {
             do {
-                guard try prepararInicioOficialJulio2026(
+                UserDefaults.standard.set(
+                    "iniciando",
+                    forKey: "diagnosticoConciliacionJulio2026"
+                )
+                guard let resultado = try prepararInicioOficialJulio2026(
                     contexto: contexto
                 ) else { return }
                 try contexto.save()
                 version = 8
                 UserDefaults.standard.set(version, forKey: clave)
+                UserDefaults.standard.set(
+                    "aplicada: \(resultado)",
+                    forKey: "diagnosticoConciliacionJulio2026"
+                )
             } catch {
+                UserDefaults.standard.set(
+                    "error: \(error)",
+                    forKey: "diagnosticoConciliacionJulio2026"
+                )
                 return
             }
         }
@@ -95,75 +107,101 @@ enum MigradorDatosClaro {
     /// como bitácora, pero dejan de alterar el disponible desde esa foto.
     @MainActor private static func prepararInicioOficialJulio2026(
         contexto: ModelContext
-    ) throws -> Bool {
+    ) throws -> String? {
         let calendario = Calendar(identifier: .gregorian)
-        let tarjetas = try contexto.fetch(FetchDescriptor<TarjetaCredito>())
+        let estados = try contexto.fetch(FetchDescriptor<EstadoDeCuenta>())
         let cuentas = try contexto.fetch(FetchDescriptor<CuentaBancaria>())
         let movimientos = try contexto.fetch(FetchDescriptor<Movimiento>())
 
-        let cortesOficiales: [(tarjeta: String, anio: Int, mes: Int, dia: Int)] = [
-            ("RAPPY", 2026, 7, 6),
-            ("HOME DEPOT", 2026, 7, 10),
-            ("LIVERPOOL", 2026, 7, 13),
-            ("HEY BANCO INC", 2026, 7, 13),
-            ("ORO SIMON", 2026, 7, 17),
-            ("BBVA IZCOALT", 2026, 7, 17),
-            ("BBVA AZUL", 2026, 7, 20)
+        // Huella tomada de los siete PDF oficiales. No depende del vínculo
+        // EstadoDeCuenta → Tarjeta, que CloudKit puede hidratar después.
+        let cortesOficiales: [
+            (fecha: (Int, Int, Int), saldo: Double, pago: Double)
+        ] = [
+            ((2026, 7, 6), 903.36, 476.89),
+            ((2026, 7, 10), 41_685.01, 2_074.70),
+            ((2026, 7, 13), 299.00, 299.00),
+            ((2026, 7, 13), 13_985.11, 5_776.46),
+            ((2026, 7, 17), 21_399.54, 13_828.60),
+            ((2026, 7, 17), 6_295.08, 6_295.08),
+            ((2026, 7, 20), 39_380.29, 14_248.79)
         ]
 
         let tieneConjuntoOficial = cortesOficiales.allSatisfy { esperado in
-            tarjetas.contains { tarjeta in
-                normalizar(tarjeta.nombre) == esperado.tarjeta
-                    && tarjeta.estadosDeCuenta.contains { estado in
-                        componentesDeFecha(
-                            estado.fechaCorte,
-                            calendario: calendario
-                        ) == (esperado.anio, esperado.mes, esperado.dia)
-                    }
+            estados.contains { estado in
+                componentesDeFecha(
+                    estado.fechaCorte,
+                    calendario: calendario
+                ) == esperado.fecha
+                    && abs(estado.saldoAlCorte - esperado.saldo) < 0.01
+                    && abs(
+                        estado.pagoParaNoGenerarIntereses - esperado.pago
+                    ) < 0.01
             }
         }
-        guard tieneConjuntoOficial else { return false }
+        guard tieneConjuntoOficial else {
+            UserDefaults.standard.set(
+                "faltan cortes",
+                forKey: "diagnosticoConciliacionJulio2026"
+            )
+            return nil
+        }
 
         guard let cuenta = cuentas.first(where: {
             !$0.archivada
                 && normalizar($0.nombre).contains("DEBITO")
                 && normalizar($0.nombre).contains("BBVA")
-        }) else { return false }
+        }) else {
+            UserDefaults.standard.set(
+                "falta cuenta",
+                forKey: "diagnosticoConciliacionJulio2026"
+            )
+            return nil
+        }
 
-        let pagosRealesEsperados: [(tarjeta: String, monto: Double)] = [
-            ("RAPPY", 476.89),
-            ("LIVERPOOL", 299.00)
+        let pagosRealesEsperados: [
+            (monto: Double, corte: (Int, Int, Int))
+        ] = [
+            (476.89, (2026, 7, 6)),
+            (299.00, (2026, 7, 13))
         ]
         let pagosReales = pagosRealesEsperados.compactMap { esperado in
             movimientos
                 .filter {
                     $0.cuentaParaCalculos
                         && $0.tipo == .pagoTarjeta
-                        && $0.cuenta === cuenta
-                        && normalizar($0.tarjeta?.nombre ?? "")
-                            == esperado.tarjeta
+                        && $0.cuenta?.persistentModelID
+                            == cuenta.persistentModelID
                         && abs($0.monto - esperado.monto) < 0.01
+                        && $0.fechaCorteObjetivoPago.map {
+                            componentesDeFecha($0, calendario: calendario)
+                                == esperado.corte
+                        } == true
                 }
                 .max { $0.creadoEl < $1.creadoEl }
         }
         guard pagosReales.count == pagosRealesEsperados.count,
               let primerPago = pagosReales.map(\.fecha).min()
-        else { return false }
+        else {
+            UserDefaults.standard.set(
+                "faltan pagos: \(pagosReales.count)",
+                forKey: "diagnosticoConciliacionJulio2026"
+            )
+            return nil
+        }
 
         // Los tres pagos fueron capturas de prueba y el usuario confirmó que
         // no ocurrieron. Cancelar conserva la trazabilidad sin descontarlos.
-        let pagosDePrueba: [(tarjeta: String, monto: Double,
-                             corte: (Int, Int, Int))] = [
-            ("BBVA AZUL", 9_977.51, (2026, 6, 20)),
-            ("BBVA IZCOALT", 11_297.44, (2026, 6, 19)),
-            ("ORO SIMON", 20_551.46, (2026, 6, 18))
+        let pagosDePrueba: [(monto: Double, corte: (Int, Int, Int))] = [
+            (9_977.51, (2026, 6, 20)),
+            (11_297.44, (2026, 6, 19)),
+            (20_551.46, (2026, 6, 18))
         ]
         for pago in movimientos where pago.cuentaParaCalculos
-            && pago.tipo == .pagoTarjeta && pago.cuenta === cuenta {
-            let nombre = normalizar(pago.tarjeta?.nombre ?? "")
+            && pago.tipo == .pagoTarjeta
+            && pago.cuenta?.persistentModelID == cuenta.persistentModelID {
             guard pagosDePrueba.contains(where: { esperado in
-                nombre == esperado.tarjeta
-                    && abs(pago.monto - esperado.monto) < 0.01
+                abs(pago.monto - esperado.monto) < 0.01
                     && pago.fechaCorteObjetivoPago.map {
                         componentesDeFecha($0, calendario: calendario)
                             == esperado.corte
@@ -180,29 +218,29 @@ enum MigradorDatosClaro {
         // Solo retiramos las fichas de los tres cortes simulados. No borramos
         // sus compras o asignaciones: sirven como memoria para reconocer MSI
         // y personas en los estados oficiales posteriores.
-        let cortesDePrueba: [(tarjeta: String, fecha: (Int, Int, Int))] = [
-            ("ORO SIMON", (2026, 6, 18)),
-            ("BBVA IZCOALT", (2026, 6, 19)),
-            ("BBVA AZUL", (2026, 6, 20))
+        let cortesDePrueba: [
+            (fecha: (Int, Int, Int), saldo: Double, pago: Double)
+        ] = [
+            ((2026, 6, 18), 29_002.93, 20_551.46),
+            ((2026, 6, 19), 11_297.44, 11_297.44),
+            ((2026, 6, 20), 38_690.01, 9_977.51)
         ]
-        for tarjeta in tarjetas {
-            let nombre = normalizar(tarjeta.nombre)
-            for estado in tarjeta.estadosDeCuenta where cortesDePrueba.contains(
-                where: {
-                    nombre == $0.tarjeta
-                        && componentesDeFecha(
-                            estado.fechaCorte,
-                            calendario: calendario
-                        ) == $0.fecha
-                }
-            ) {
-                contexto.delete(estado)
-            }
+        for estado in estados where cortesDePrueba.contains(where: {
+            componentesDeFecha(
+                estado.fechaCorte,
+                calendario: calendario
+            ) == $0.fecha
+                && abs(estado.saldoAlCorte - $0.saldo) < 0.01
+                && abs(
+                    estado.pagoParaNoGenerarIntereses - $0.pago
+                ) < 0.01
+        }) {
+            contexto.delete(estado)
         }
 
         cuenta.saldoInicial = 4_314.35
         cuenta.fechaSaldoInicial = primerPago.addingTimeInterval(-1)
-        return true
+        return "saldo preparado"
     }
 
     private static func normalizar(_ texto: String) -> String {
